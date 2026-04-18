@@ -1,82 +1,47 @@
-# ملاحظات الأداء — Performance & Scalability Notes
+# الأداء — Performance
 
-> **رقم العنصر**: #35 | **المحور**: ح | **الحالة**: مكتمل
-
----
-
-## 1. الاستعلامات الثقيلة
-
-| الاستعلام | الصفحة | التأثير |
-|-----------|--------|---------|
-| getSummaryData() | /summary | تجميع من 7 جداول (sales, purchases, payments, expenses, deliveries, clients, suppliers) |
-| المتوسط المرجح | /purchases (POST) | حساب مع كل مشترى جديد |
-| FIFO walker | /clients/[id]/collect | يمشي على جميع المبيعات المفتوحة |
-| Bonus calculation | /deliveries (PUT) | حساب عمولتين + إنشاء فاتورة في معاملة واحدة |
+> **رقم العنصر**: #36 | **المحور**: ح | **الحالة**: قيد التحديث
 
 ---
 
-## 2. الفهارس الموجودة
+## الفهارس
 
-### فهارس التفرد
-- `users.username` (UNIQUE)
-- `products.name` (UNIQUE)
-- `purchases/sales/deliveries/invoices.ref_code` (UNIQUE جزئي)
-- `clients.(name,phone)` و `clients.(name,email)` (UNIQUE جزئي)
-- `suppliers.(name,phone)` (UNIQUE جزئي)
-- `bonuses.(delivery_id,role)` (UNIQUE)
-- `entity_aliases.(entity_type,normalized_alias)` (UNIQUE)
+| الجدول | العمود/الأعمدة | النوع |
+|--------|---------------|------|
+| users | username | UNIQUE |
+| products | name | UNIQUE |
+| orders | ref_code WHERE != '' | UNIQUE |
+| orders | client_name | INDEX |
+| orders | payment_status | INDEX |
+| order_items | product_name | INDEX |
+| purchases | ref_code WHERE != '' | UNIQUE |
+| purchases | supplier | INDEX |
+| deliveries | ref_code WHERE != '' | UNIQUE |
+| invoices | ref_code WHERE != '' | UNIQUE |
+| clients | (name, phone) WHERE phone != '' | UNIQUE |
+| clients | (name, email) WHERE email != '' | UNIQUE |
+| suppliers | (name, phone) WHERE phone != '' | UNIQUE |
+| bonuses | (delivery_id, role, item) | UNIQUE |
+| price_history | product_name | INDEX |
+| cancellations | order_id | INDEX |
+| entity_aliases | (entity_type, normalized_alias) | UNIQUE |
+| ai_patterns | (spoken_text, correct_value, field_name, username) | UNIQUE |
+| notification_preferences | (user_id, notification_type, channel) | UNIQUE |
+| permissions | (role, resource, action) | UNIQUE |
 
-### فهارس الأداء
-- `sales.payment_status` — فلترة حالة الدفع
-- `supplier_payments.purchase_id` — بحث بالمشترى
-- `profit_distributions.group_id` — تجميع التوزيعات
-- `profit_distributions.username` — بحث بالمستلم
-- `profit_distributions.created_at DESC` — ترتيب الأحدث
-- `cancellations.sale_id` — بحث بالبيع
+## Connection Pooling
 
----
+- Neon Serverless مع @neondatabase/serverless
+- Connection pooling مدمج
 
-## 3. Connection Pooling
+## Caching
 
-- **المزود**: Neon Serverless عبر @vercel/postgres
-- **الآلية**: Neon proxy يدير connection pooling
-- **POSTGRES_URL**: اتصال مع pooling (للاستعلامات العادية)
-- **POSTGRES_URL_NON_POOLING**: اتصال مباشر (للمعاملات الطويلة)
+- TanStack Query: stale-while-revalidate + auto-refetch on window focus
+- لا Redis — الذاكرة فقط (10-20 مستخدم)
+- voice entity cache: Fuse.js index يُبنى عند أول استخدام
 
----
+## حدود Neon Free
 
-## 4. الدقة العددية
-
-- **النوع**: NUMERIC(19,2) بدل REAL/FLOAT
-- **السبب**: تجنب أخطاء التقريب في التجميعات المالية
-- **التأثير**: أبطأ قليلًا من FLOAT لكن دقيق 100%
-- **تسامح المقارنة**: 0.01€ (سنت واحد) — موحد في كل مكان
-
----
-
-## 5. حدود Vercel
-
-| الحد | القيمة |
-|------|--------|
-| وقت تنفيذ الدالة | حسب الخطة (10-60 ثانية) |
-| حجم الطلب | محدود (voice: 10MB max) |
-| Cold Start | ممكن في كل طلب (serverless) |
-| Rate Limit (voice) | 10/دقيقة (in-memory، يُمسح عند cold start) |
-
----
-
-## 6. التخزين المؤقت
-
-| الآلية | الاستخدام | المدة |
-|--------|----------|-------|
-| GlobalSearch cache | كيانات البحث الشامل | 2 دقيقة |
-| Fuse.js index cache | entity resolution للصوت | حتى إبطال |
-| useAutoRefresh | تحديث دوري للبيانات | حسب الإعداد |
-
----
-
-## 7. لا يوجد CDN أو Redis
-
-- لا توجد طبقة تخزين مؤقت خارجية
-- جميع الاستعلامات تذهب مباشرة لقاعدة البيانات
-- التخزين المؤقت client-side فقط
+- 0.5GB storage → الصور في Blob/Cloudinary (ليس DB)
+- 190 compute hours/month → كافي لـ 10-20 مستخدم
+- activity_log: تنظيف بعد 6 أشهر إذا لزم

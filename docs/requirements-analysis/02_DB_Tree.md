@@ -1,45 +1,58 @@
-# Database Tree & Workflow — VITESSE ECO SAS
+# نموذج البيانات — Database Schema v2
 
-> **Database Engine**: PostgreSQL (Neon Serverless)
-> **ORM**: @vercel/postgres (direct SQL)
-> **Total Tables**: 23
-> **Numeric Precision**: NUMERIC(19,2) for money, NUMERIC(5,2) for percentages
-> **Date Format**: ISO 8601 TEXT (YYYY-MM-DD)
-
----
-
-## Table of Contents
-
-1. [Database Tree (All Tables)](#database-tree)
-2. [Relationships & Foreign Keys](#relationships--foreign-keys)
-3. [User Roles & Permissions](#user-roles--permissions)
-4. [Business Workflow](#business-workflow)
-5. [Indexes & Constraints](#indexes--constraints)
-6. [Default Settings & Seed Data](#default-settings--seed-data)
+> **رقم العنصر**: #02 | **المحور**: أ | **الحالة**: قيد التحديث
+> **قاعدة البيانات**: PostgreSQL (Neon Serverless)
+> **ORM**: Drizzle ORM + @neondatabase/serverless
+> **عدد الجداول**: ~35
+> **الدقة المالية**: NUMERIC(19,2) — كل الأرقام TTC
+> **التواريخ**: DATE / TIMESTAMPTZ (المنطقة: Europe/Paris)
 
 ---
 
-## Database Tree
+## فهرس الجداول
 
-### 1. `users`
-> Authentication and role-based access control
+| # | المجموعة | الجداول |
+|---|---------|---------|
+| 1-2 | المستخدمين والإعدادات | users, settings |
+| 3-5 | المنتجات والكتالوج | products, product_images, product_commission_rules |
+| 6-7 | الموردين | suppliers, supplier_payments |
+| 8 | العملاء | clients |
+| 9-12 | الطلبات (يحل محل sales) | orders, order_items, gift_pool, payments |
+| 13-14 | المشتريات | purchases, price_history |
+| 15 | المصاريف | expenses |
+| 16-17 | التوصيل والمهام | deliveries, driver_tasks |
+| 18-19 | الفواتير | invoices, invoice_sequence |
+| 20-22 | العمولات والتسويات | bonuses, user_bonus_rates, settlements |
+| 23-24 | توزيع الأرباح | profit_distribution_groups, profit_distributions |
+| 25-27 | الصناديق المالية | treasury_accounts, treasury_movements, payment_schedule |
+| 28-29 | التنبيهات | notifications, notification_preferences |
+| 30 | سجل النشاطات | activity_log |
+| 31 | الصلاحيات | permissions |
+| 32 | الإلغاءات | cancellations |
+| 33 | الجرد | inventory_counts |
+| 34-36 | النظام الصوتي | voice_logs, ai_corrections, ai_patterns, entity_aliases |
+
+---
+
+## 1. `users` — المستخدمين
 
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
 | username | TEXT | UNIQUE, NOT NULL |
-| password | TEXT | NOT NULL (bcrypt hashed) |
+| password | TEXT | NOT NULL (bcrypt) |
 | name | TEXT | NOT NULL |
-| role | TEXT | NOT NULL, DEFAULT 'seller' — values: admin, manager, seller, driver |
+| role | TEXT | NOT NULL, DEFAULT 'seller' |
 | active | BOOLEAN | DEFAULT true |
-| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP |
 | profit_share_pct | NUMERIC(5,2) | DEFAULT 0 |
-| profit_share_start | TEXT | NULL |
+| profit_share_start | DATE | NULL |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() |
+
+**CHECK**: `role IN ('pm','gm','manager','seller','driver','stock_keeper')`
 
 ---
 
-### 2. `settings`
-> Key-value configuration store
+## 2. `settings` — الإعدادات
 
 | Column | Type | Constraints |
 |--------|------|-------------|
@@ -48,29 +61,68 @@
 
 ---
 
-### 3. `products`
-> Product catalog and inventory
+## 3. `products` — المنتجات
 
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
 | name | TEXT | UNIQUE, NOT NULL |
-| category | TEXT | DEFAULT '' |
+| category | TEXT | NOT NULL, DEFAULT '' |
 | unit | TEXT | DEFAULT '' |
 | buy_price | NUMERIC(19,2) | DEFAULT 0 |
 | sell_price | NUMERIC(19,2) | DEFAULT 0 |
 | stock | NUMERIC(19,2) | DEFAULT 0 |
-| notes | TEXT | DEFAULT '' |
-| created_by | TEXT | DEFAULT '' |
-| updated_by | TEXT | NULL |
-| updated_at | TIMESTAMPTZ | NULL |
 | low_stock_threshold | INTEGER | DEFAULT 3 |
+| active | BOOLEAN | DEFAULT true |
 | description_ar | TEXT | DEFAULT '' |
+| description_long | TEXT | DEFAULT '' |
+| specs | JSONB | DEFAULT '{}' |
+| catalog_visible | BOOLEAN | DEFAULT true |
+| notes | TEXT | DEFAULT '' |
+| created_by | TEXT | NOT NULL |
+| updated_by | TEXT | NULL |
+| updated_at | TIMESTAMPTZ | NULL |
+
+**ملاحظة**: المنتجات لا تُحذف أبداً — تُعطّل فقط (active=false). قرار H6.
 
 ---
 
-### 4. `suppliers`
-> Supplier information
+## 4. `product_images` — صور المنتجات
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | SERIAL | PRIMARY KEY |
+| product_id | INTEGER | NOT NULL → FK products.id ON DELETE CASCADE |
+| url | TEXT | NOT NULL |
+| is_primary | BOOLEAN | DEFAULT false |
+| sort_order | INTEGER | DEFAULT 0 |
+| uploaded_by | TEXT | NOT NULL |
+| uploaded_at | TIMESTAMPTZ | DEFAULT NOW() |
+
+**ملاحظة**: الصور تُخزّن في Vercel Blob أو Cloudinary — الجدول يحفظ الرابط فقط.
+
+---
+
+## 5. `product_commission_rules` — قواعد العمولة حسب فئة المنتج
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | SERIAL | PRIMARY KEY |
+| category | TEXT | NOT NULL |
+| seller_fixed_per_unit | NUMERIC(19,2) | DEFAULT 0 |
+| seller_pct_overage | NUMERIC(5,2) | DEFAULT 0 |
+| driver_fixed_per_delivery | NUMERIC(19,2) | DEFAULT 0 |
+| priority | INTEGER | DEFAULT 0 |
+| created_by | TEXT | NOT NULL |
+| updated_at | TIMESTAMPTZ | NULL |
+
+**CHECK**: `seller_pct_overage >= 0 AND seller_pct_overage <= 100`
+**CHECK**: `seller_fixed_per_unit >= 0`
+**CHECK**: `driver_fixed_per_delivery >= 0`
+
+---
+
+## 6. `suppliers` — الموردين
 
 | Column | Type | Constraints |
 |--------|------|-------------|
@@ -82,231 +134,291 @@
 | updated_by | TEXT | NULL |
 | updated_at | TIMESTAMPTZ | NULL |
 
-**Unique**: `(name, phone)` WHERE phone != ''
+**UNIQUE**: `(name, phone) WHERE phone != ''`
 
 ---
 
-### 5. `clients`
-> Customer information
+## 7. `supplier_payments` — دفعات الموردين
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | SERIAL | PRIMARY KEY |
+| purchase_id | INTEGER | NOT NULL → FK purchases.id ON DELETE RESTRICT |
+| date | DATE | NOT NULL |
+| amount | NUMERIC(19,2) | NOT NULL |
+| payment_method | TEXT | DEFAULT 'كاش' |
+| notes | TEXT | DEFAULT '' |
+| created_by | TEXT | NOT NULL |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() |
+
+**CHECK**: `payment_method IN ('كاش','بنك')`
+
+---
+
+## 8. `clients` — العملاء
 
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
 | name | TEXT | NOT NULL |
+| latin_name | TEXT | DEFAULT '' |
 | phone | TEXT | DEFAULT '' |
-| address | TEXT | DEFAULT '' |
-| notes | TEXT | DEFAULT '' |
 | email | TEXT | DEFAULT '' |
+| address | TEXT | DEFAULT '' |
+| description_ar | TEXT | DEFAULT '' |
+| notes | TEXT | DEFAULT '' |
 | created_by | TEXT | DEFAULT '' |
 | updated_by | TEXT | NULL |
 | updated_at | TIMESTAMPTZ | NULL |
-| latin_name | TEXT | DEFAULT '' |
-| description_ar | TEXT | DEFAULT '' |
 
-**Unique**: `(name, phone)` WHERE phone != '' ; `(name, email)` WHERE email != ''
+**UNIQUE**: `(name, phone) WHERE phone != ''`
+**UNIQUE**: `(name, email) WHERE email != ''`
 
 ---
 
-### 6. `purchases`
-> Product purchases from suppliers
+## 9. `orders` — الطلبات (يحل محل sales)
 
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
-| date | TEXT | NOT NULL |
+| ref_code | TEXT | NOT NULL |
+| date | DATE | NOT NULL |
+| client_name | TEXT | NOT NULL |
+| client_phone | TEXT | DEFAULT '' |
+| status | TEXT | DEFAULT 'محجوز' |
+| payment_method | TEXT | NOT NULL |
+| total_amount | NUMERIC(19,2) | DEFAULT 0 |
+| paid_amount | NUMERIC(19,2) | DEFAULT 0 |
+| remaining | NUMERIC(19,2) | DEFAULT 0 |
+| payment_status | TEXT | DEFAULT 'pending' |
+| down_payment | NUMERIC(19,2) | DEFAULT 0 |
+| cancel_reason | TEXT | NULL |
+| notes | TEXT | DEFAULT '' |
+| created_by | TEXT | NOT NULL |
+| updated_by | TEXT | NULL |
+| updated_at | TIMESTAMPTZ | NULL |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() |
+
+**CHECK**: `status IN ('محجوز','قيد_التحضير','جاهز','مؤكد','ملغي')`
+**CHECK**: `payment_method IN ('كاش','بنك','آجل')`
+**CHECK**: `payment_status IN ('pending','partial','paid','cancelled')`
+**UNIQUE**: `ref_code WHERE ref_code != ''`
+**INDEX**: `orders_client_name_idx ON (client_name)`
+**INDEX**: `orders_payment_status_idx ON (payment_status)`
+
+---
+
+## 10. `order_items` — أصناف الطلب
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | SERIAL | PRIMARY KEY |
+| order_id | INTEGER | NOT NULL → FK orders.id ON DELETE CASCADE |
+| product_name | TEXT | NOT NULL |
+| category | TEXT | DEFAULT '' |
+| quantity | NUMERIC(19,2) | NOT NULL |
+| unit_price | NUMERIC(19,2) | NOT NULL |
+| cost_price | NUMERIC(19,2) | DEFAULT 0 |
+| line_total | NUMERIC(19,2) | NOT NULL |
+| discount_type | TEXT | NULL |
+| discount_value | NUMERIC(19,2) | DEFAULT 0 |
+| discount_reason | TEXT | DEFAULT '' |
+| is_gift | BOOLEAN | DEFAULT false |
+| gift_approved_by | TEXT | NULL |
+| vin | TEXT | DEFAULT '' |
+| commission_amount | NUMERIC(19,2) | DEFAULT 0 |
+
+**CHECK**: `discount_type IN ('percent','fixed') OR discount_type IS NULL`
+**INDEX**: `order_items_product_name_idx ON (product_name)`
+
+---
+
+## 11. `gift_pool` — مجمع الهدايا
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | SERIAL | PRIMARY KEY |
+| product_id | INTEGER | NOT NULL → FK products.id |
+| max_quantity | INTEGER | NOT NULL |
+| remaining_quantity | INTEGER | NOT NULL |
+| enabled | BOOLEAN | DEFAULT true |
+| set_by | TEXT | NOT NULL |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() |
+
+---
+
+## 12. `payments` — دفعات العملاء
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | SERIAL | PRIMARY KEY |
+| date | DATE | NOT NULL |
+| client_name | TEXT | NOT NULL |
+| amount | NUMERIC(19,2) | NOT NULL |
+| order_id | INTEGER | NULL → FK orders.id |
+| type | TEXT | DEFAULT 'collection' |
+| payment_method | TEXT | DEFAULT 'كاش' |
+| notes | TEXT | DEFAULT '' |
+| created_by | TEXT | NOT NULL |
+| updated_by | TEXT | NULL |
+| updated_at | TIMESTAMPTZ | NULL |
+
+**CHECK**: `type IN ('collection','refund','advance')`
+**CHECK**: `payment_method IN ('كاش','بنك')`
+
+---
+
+## 13. `purchases` — المشتريات
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | SERIAL | PRIMARY KEY |
+| ref_code | TEXT | DEFAULT '' |
+| date | DATE | NOT NULL |
 | supplier | TEXT | NOT NULL |
 | item | TEXT | NOT NULL |
 | category | TEXT | DEFAULT '' |
 | quantity | NUMERIC(19,2) | NOT NULL |
 | unit_price | NUMERIC(19,2) | NOT NULL |
 | total | NUMERIC(19,2) | NOT NULL |
-| payment_type | TEXT | DEFAULT 'كاش' |
-| notes | TEXT | DEFAULT '' |
-| ref_code | TEXT | DEFAULT '' |
-| created_by | TEXT | DEFAULT '' |
-| updated_by | TEXT | NULL |
-| updated_at | TIMESTAMPTZ | NULL |
+| payment_method | TEXT | DEFAULT 'كاش' |
 | paid_amount | NUMERIC(19,2) | DEFAULT 0 |
 | payment_status | TEXT | DEFAULT 'paid' |
-
-**Unique**: `ref_code` WHERE ref_code != ''
-
----
-
-### 7. `supplier_payments`
-> Audit trail for partial supplier payments
-
-| Column | Type | Constraints |
-|--------|------|-------------|
-| id | SERIAL | PRIMARY KEY |
-| purchase_id | INTEGER | NOT NULL → FK purchases.id |
-| date | TEXT | NOT NULL |
-| amount | NUMERIC(19,2) | NOT NULL |
-| payment_method | TEXT | DEFAULT 'كاش' |
 | notes | TEXT | DEFAULT '' |
-| created_by | TEXT | DEFAULT '' |
-| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP |
-
----
-
-### 8. `sales`
-> Product sales to clients
-
-| Column | Type | Constraints |
-|--------|------|-------------|
-| id | SERIAL | PRIMARY KEY |
-| date | TEXT | NOT NULL |
-| client_name | TEXT | NOT NULL |
-| item | TEXT | NOT NULL |
-| quantity | NUMERIC(19,2) | NOT NULL |
-| cost_price | NUMERIC(19,2) | DEFAULT 0 |
-| unit_price | NUMERIC(19,2) | NOT NULL |
-| total | NUMERIC(19,2) | NOT NULL |
-| cost_total | NUMERIC(19,2) | DEFAULT 0 |
-| profit | NUMERIC(19,2) | DEFAULT 0 |
-| payment_method | TEXT | NOT NULL |
-| payment_type | TEXT | DEFAULT 'كاش' |
-| paid_amount | NUMERIC(19,2) | DEFAULT 0 |
-| remaining | NUMERIC(19,2) | DEFAULT 0 |
-| status | TEXT | DEFAULT 'محجوز' |
-| notes | TEXT | DEFAULT '' |
-| ref_code | TEXT | DEFAULT '' |
-| created_by | TEXT | DEFAULT '' |
+| created_by | TEXT | NOT NULL |
 | updated_by | TEXT | NULL |
 | updated_at | TIMESTAMPTZ | NULL |
-| vin | TEXT | DEFAULT '' |
-| recommended_price | NUMERIC(19,2) | DEFAULT 0 |
-| down_payment_expected | NUMERIC(19,2) | DEFAULT 0 |
-| payment_status | TEXT | DEFAULT 'pending' |
 
-**Unique**: `ref_code` WHERE ref_code != ''
-**Check**: `payment_status IN ('pending','partial','paid','cancelled')`
+**UNIQUE**: `ref_code WHERE ref_code != ''`
+**INDEX**: `purchases_supplier_idx ON (supplier)`
 
 ---
 
-### 9. `payments`
-> Client payment records
+## 14. `price_history` — سجل تغييرات الأسعار
 
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
-| date | TEXT | NOT NULL |
-| client_name | TEXT | NOT NULL |
-| amount | NUMERIC(19,2) | NOT NULL |
-| sale_id | INTEGER | DEFAULT NULL → FK sales.id (optional) |
-| notes | TEXT | DEFAULT '' |
-| created_by | TEXT | DEFAULT '' |
-| updated_by | TEXT | NULL |
-| updated_at | TIMESTAMPTZ | NULL |
-| type | TEXT | DEFAULT 'collection' |
-| payment_method | TEXT | DEFAULT 'كاش' |
-| tva_amount | NUMERIC(19,2) | DEFAULT 0 |
+| date | DATE | NOT NULL |
+| product_name | TEXT | NOT NULL |
+| old_buy_price | NUMERIC(19,2) | DEFAULT 0 |
+| new_buy_price | NUMERIC(19,2) | DEFAULT 0 |
+| old_sell_price | NUMERIC(19,2) | DEFAULT 0 |
+| new_sell_price | NUMERIC(19,2) | DEFAULT 0 |
+| purchase_id | INTEGER | NULL |
+| changed_by | TEXT | NOT NULL |
 
-**Check**: `type IN ('collection','refund','advance')`
-**Check**: `payment_method IN ('كاش','بنك')`
+**INDEX**: `price_history_product_name_idx ON (product_name)`
 
 ---
 
-### 10. `expenses`
-> Business expenses
+## 15. `expenses` — المصاريف
 
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
-| date | TEXT | NOT NULL |
+| date | DATE | NOT NULL |
 | category | TEXT | NOT NULL |
 | description | TEXT | NOT NULL |
 | amount | NUMERIC(19,2) | NOT NULL |
-| payment_type | TEXT | DEFAULT 'كاش' |
+| payment_method | TEXT | DEFAULT 'كاش' |
 | notes | TEXT | DEFAULT '' |
-| created_by | TEXT | DEFAULT '' |
+| created_by | TEXT | NOT NULL |
 | updated_by | TEXT | NULL |
 | updated_at | TIMESTAMPTZ | NULL |
 
 ---
 
-### 11. `deliveries`
-> Product delivery tracking
+## 16. `deliveries` — التوصيلات
 
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
-| date | TEXT | NOT NULL |
+| ref_code | TEXT | DEFAULT '' |
+| date | DATE | NOT NULL |
+| order_id | INTEGER | NOT NULL → FK orders.id |
 | client_name | TEXT | NOT NULL |
 | client_phone | TEXT | DEFAULT '' |
 | address | TEXT | DEFAULT '' |
-| items | TEXT | NOT NULL |
-| total_amount | NUMERIC(19,2) | DEFAULT 0 |
 | status | TEXT | DEFAULT 'قيد الانتظار' |
-| driver_name | TEXT | DEFAULT '' |
+| assigned_driver | TEXT | DEFAULT '' |
 | notes | TEXT | DEFAULT '' |
-| ref_code | TEXT | DEFAULT '' |
-| created_by | TEXT | DEFAULT '' |
+| created_by | TEXT | NOT NULL |
 | updated_by | TEXT | NULL |
 | updated_at | TIMESTAMPTZ | NULL |
-| sale_id | INTEGER | DEFAULT NULL → FK sales.id ON DELETE SET NULL |
-| assigned_driver | TEXT | DEFAULT '' |
-| client_email | TEXT | DEFAULT '' |
-| vin | TEXT | DEFAULT '' |
 
-**Unique**: `ref_code` WHERE ref_code != ''
+**CHECK**: `status IN ('قيد الانتظار','قيد_التحضير','جاهز','جاري التوصيل','تم التوصيل','ملغي')`
+**UNIQUE**: `ref_code WHERE ref_code != ''`
 
 ---
 
-### 12. `invoices`
-> Customer invoices
+## 17. `driver_tasks` — مهام السائق
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | SERIAL | PRIMARY KEY |
+| type | TEXT | NOT NULL |
+| assigned_driver | TEXT | NOT NULL |
+| status | TEXT | DEFAULT 'pending' |
+| related_entity_type | TEXT | NULL |
+| related_entity_id | INTEGER | NULL |
+| notes | TEXT | DEFAULT '' |
+| assigned_by | TEXT | NOT NULL |
+| completed_at | TIMESTAMPTZ | NULL |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() |
+
+**CHECK**: `type IN ('delivery','supplier_pickup','collection')`
+**CHECK**: `status IN ('pending','in_progress','completed','cancelled')`
+
+---
+
+## 18. `invoices` — الفواتير
 
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
 | ref_code | TEXT | NOT NULL |
-| date | TEXT | NOT NULL |
-| sale_id | INTEGER | NOT NULL → FK sales.id ON DELETE CASCADE |
-| delivery_id | INTEGER | NOT NULL → FK deliveries.id ON DELETE CASCADE |
+| date | DATE | NOT NULL |
+| order_id | INTEGER | NOT NULL → FK orders.id |
+| delivery_id | INTEGER | NOT NULL → FK deliveries.id |
 | client_name | TEXT | NOT NULL |
 | client_phone | TEXT | DEFAULT '' |
 | client_email | TEXT | DEFAULT '' |
 | client_address | TEXT | DEFAULT '' |
-| item | TEXT | NOT NULL |
-| quantity | NUMERIC(19,2) | NOT NULL |
-| unit_price | NUMERIC(19,2) | NOT NULL |
-| total | NUMERIC(19,2) | NOT NULL |
-| payment_type | TEXT | DEFAULT 'كاش' |
-| vin | TEXT | DEFAULT '' |
+| payment_method | TEXT | DEFAULT 'كاش' |
 | seller_name | TEXT | DEFAULT '' |
 | driver_name | TEXT | DEFAULT '' |
 | status | TEXT | DEFAULT 'مؤكد' |
-| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP |
-| updated_by | TEXT | NULL |
-| updated_at | TIMESTAMPTZ | NULL |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() |
 
-**Unique**: `ref_code` WHERE ref_code != ''
+**ملاحظة**: أصناف الفاتورة تُقرأ من order_items عبر order_id — لا تُكرر هنا.
+**ملاحظة**: TVA تُحسب عند توليد PDF فقط — لا تُخزّن. قرار H1.
+**UNIQUE**: `ref_code WHERE ref_code != ''`
 
 ---
 
-### 13. `invoice_sequence`
-> Atomic monthly invoice number generator
+## 19. `invoice_sequence` — ترقيم الفواتير الشهري
 
 | Column | Type | Constraints |
 |--------|------|-------------|
-| year | INTEGER | PRIMARY KEY (composite) |
-| month | INTEGER | PRIMARY KEY (composite) |
+| year | INTEGER | PK (composite) |
+| month | INTEGER | PK (composite) |
 | last_number | INTEGER | DEFAULT 0 |
 
 ---
 
-### 14. `bonuses`
-> Seller and driver bonuses
+## 20. `bonuses` — العمولات
 
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
-| date | TEXT | NOT NULL |
+| date | DATE | NOT NULL |
 | username | TEXT | NOT NULL |
 | role | TEXT | NOT NULL |
-| sale_id | INTEGER | NULL → FK sales.id ON DELETE CASCADE |
-| delivery_id | INTEGER | NOT NULL → FK deliveries.id ON DELETE CASCADE |
+| order_id | INTEGER | NOT NULL → FK orders.id |
+| delivery_id | INTEGER | NOT NULL → FK deliveries.id |
 | item | TEXT | DEFAULT '' |
+| category | TEXT | DEFAULT '' |
 | quantity | NUMERIC(19,2) | DEFAULT 0 |
 | recommended_price | NUMERIC(19,2) | DEFAULT 0 |
 | actual_price | NUMERIC(19,2) | DEFAULT 0 |
@@ -316,31 +428,34 @@
 | settled | BOOLEAN | DEFAULT false |
 | settlement_id | INTEGER | NULL |
 
-**Unique**: `(delivery_id, role)`
+**UNIQUE**: `(delivery_id, role, item)` — عمولة لكل صنف لكل دور لكل توصيل
+**ملاحظة**: order_id = NOT NULL دائماً. قرار M12.
 
 ---
 
-### 15. `user_bonus_rates`
-> Per-user bonus rate overrides
+## 21. `user_bonus_rates` — تجاوزات العمولة لكل مستخدم
 
 | Column | Type | Constraints |
 |--------|------|-------------|
-| username | TEXT | PRIMARY KEY → FK users.username ON DELETE CASCADE |
+| username | TEXT | PK → FK users.username ON DELETE CASCADE |
 | seller_fixed | NUMERIC(19,2) | NULL |
 | seller_percentage | NUMERIC(5,2) | NULL |
 | driver_fixed | NUMERIC(19,2) | NULL |
 | updated_by | TEXT | NULL |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() |
 
+**CHECK**: `seller_percentage >= 0 AND seller_percentage <= 100`
+**CHECK**: `seller_fixed >= 0 OR seller_fixed IS NULL`
+**CHECK**: `driver_fixed >= 0 OR driver_fixed IS NULL`
+
 ---
 
-### 16. `settlements`
-> Bonus and salary payouts
+## 22. `settlements` — التسويات والمكافآت
 
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
-| date | TEXT | NOT NULL |
+| date | DATE | NOT NULL |
 | type | TEXT | NOT NULL |
 | username | TEXT | NULL |
 | description | TEXT | NOT NULL |
@@ -350,123 +465,252 @@
 | updated_by | TEXT | NULL |
 | updated_at | TIMESTAMPTZ | NULL |
 
+**ملاحظة**: المبلغ السالب = دين استرداد (عمولة مصروفة أُلغيت). قرار C2.
+
 ---
 
-### 17. `price_history`
-> Audit trail for product price changes
+## 23. `profit_distribution_groups` — مجموعات التوزيع
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | TEXT | PRIMARY KEY |
+| base_period_start | DATE | NULL |
+| base_period_end | DATE | NULL |
+| base_amount | NUMERIC(19,2) | NOT NULL |
+| notes | TEXT | DEFAULT '' |
+| created_by | TEXT | NOT NULL |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() |
+
+**UNIQUE**: `(base_period_start, base_period_end) WHERE start IS NOT NULL AND end IS NOT NULL`
+**ملاحظة**: كل فترة تُوزّع مرة واحدة فقط. قرار L5.
+
+---
+
+## 24. `profit_distributions` — سجلات التوزيع
 
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
-| date | TEXT | NOT NULL |
-| product_name | TEXT | NOT NULL |
-| old_buy_price | NUMERIC(19,2) | DEFAULT 0 |
-| new_buy_price | NUMERIC(19,2) | DEFAULT 0 |
-| old_sell_price | NUMERIC(19,2) | DEFAULT 0 |
-| new_sell_price | NUMERIC(19,2) | DEFAULT 0 |
-| purchase_id | INTEGER | NULL |
-| changed_by | TEXT | DEFAULT '' |
-| updated_by | TEXT | NULL |
-| updated_at | TIMESTAMPTZ | NULL |
-
----
-
-### 18. `profit_distributions`
-> Profit sharing distribution records
-
-| Column | Type | Constraints |
-|--------|------|-------------|
-| id | SERIAL | PRIMARY KEY |
-| group_id | TEXT | NOT NULL |
+| group_id | TEXT | NOT NULL → FK profit_distribution_groups.id ON DELETE CASCADE |
 | username | TEXT | NOT NULL |
 | base_amount | NUMERIC(19,2) | NOT NULL |
 | percentage | NUMERIC(5,2) | NOT NULL |
 | amount | NUMERIC(19,2) | NOT NULL |
-| base_period_start | TEXT | NULL |
-| base_period_end | TEXT | NULL |
 | notes | TEXT | DEFAULT '' |
 | created_by | TEXT | NOT NULL |
-| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP |
-| updated_by | TEXT | NULL |
-| updated_at | TIMESTAMPTZ | NULL |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() |
 
 ---
 
-### 19. `cancellations`
-> Audit trail for sale cancellations
+## 25. `treasury_accounts` — الصناديق المالية
 
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
-| sale_id | INTEGER | NOT NULL → FK sales.id |
+| name | TEXT | NOT NULL |
+| type | TEXT | NOT NULL |
+| owner_username | TEXT | NULL |
+| parent_account_id | INTEGER | NULL → FK treasury_accounts.id |
+| balance | NUMERIC(19,2) | DEFAULT 0 |
+| last_reconciled_at | TIMESTAMPTZ | NULL |
+
+**CHECK**: `type IN ('main_cash','main_bank','manager_box','driver_custody')`
+
+---
+
+## 26. `treasury_movements` — حركات الصناديق
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | SERIAL | PRIMARY KEY |
+| from_account_id | INTEGER | NULL → FK treasury_accounts.id |
+| to_account_id | INTEGER | NULL → FK treasury_accounts.id |
+| type | TEXT | NOT NULL |
+| amount | NUMERIC(19,2) | NOT NULL |
+| date | DATE | NOT NULL |
+| category | TEXT | NOT NULL |
+| reference_type | TEXT | NULL |
+| reference_id | INTEGER | NULL |
+| description | TEXT | DEFAULT '' |
+| notes | TEXT | DEFAULT '' |
+| created_by | TEXT | NOT NULL |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() |
+| reconciled | BOOLEAN | DEFAULT false |
+
+**CHECK**: `type IN ('inflow','outflow','transfer','reconciliation')`
+**CHECK**: `category IN ('sale_collection','supplier_payment','expense','settlement','reward','profit_distribution','driver_handover','manager_settlement','funding','bank_deposit','bank_withdrawal','refund','supplier_credit')`
+
+---
+
+## 27. `payment_schedule` — جدول الدفعات الآجلة
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | SERIAL | PRIMARY KEY |
+| order_id | INTEGER | NOT NULL → FK orders.id |
+| due_date | DATE | NOT NULL |
+| amount | NUMERIC(19,2) | NOT NULL |
+| status | TEXT | DEFAULT 'pending' |
+| paid_at | TIMESTAMPTZ | NULL |
+
+**CHECK**: `status IN ('pending','paid','overdue')`
+
+---
+
+## 28. `notifications` — التنبيهات
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | SERIAL | PRIMARY KEY |
+| user_id | INTEGER | NOT NULL → FK users.id |
+| type | TEXT | NOT NULL |
+| title | TEXT | NOT NULL |
+| body | TEXT | DEFAULT '' |
+| entity_type | TEXT | NULL |
+| entity_id | INTEGER | NULL |
+| read | BOOLEAN | DEFAULT false |
+| read_at | TIMESTAMPTZ | NULL |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() |
+
+---
+
+## 29. `notification_preferences` — تفضيلات التنبيهات
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | SERIAL | PRIMARY KEY |
+| user_id | INTEGER | NOT NULL → FK users.id |
+| notification_type | TEXT | NOT NULL |
+| channel | TEXT | NOT NULL |
+| enabled | BOOLEAN | DEFAULT true |
+
+**CHECK**: `channel IN ('in_app','email','push')`
+**UNIQUE**: `(user_id, notification_type, channel)`
+
+---
+
+## 30. `activity_log` — سجل النشاطات
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | SERIAL | PRIMARY KEY |
+| timestamp | TIMESTAMPTZ | DEFAULT NOW() |
+| user_id | INTEGER | NULL |
+| username | TEXT | NOT NULL |
+| action | TEXT | NOT NULL |
+| entity_type | TEXT | NOT NULL |
+| entity_id | INTEGER | NULL |
+| entity_ref_code | TEXT | NULL |
+| details | JSONB | NULL |
+| ip_address | TEXT | NULL |
+
+**CHECK**: `action IN ('create','update','delete','cancel','confirm','collect','login','logout')`
+
+---
+
+## 31. `permissions` — الصلاحيات
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | SERIAL | PRIMARY KEY |
+| role | TEXT | NOT NULL |
+| resource | TEXT | NOT NULL |
+| action | TEXT | NOT NULL |
+| allowed | BOOLEAN | DEFAULT false |
+
+**UNIQUE**: `(role, resource, action)`
+
+---
+
+## 32. `cancellations` — سجل الإلغاءات
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | SERIAL | PRIMARY KEY |
+| order_id | INTEGER | NOT NULL → FK orders.id |
 | cancelled_by | TEXT | NOT NULL |
 | cancelled_at | TIMESTAMPTZ | DEFAULT NOW() |
 | reason | TEXT | NOT NULL |
 | refund_amount | NUMERIC(19,2) | DEFAULT 0 |
+| return_to_stock | BOOLEAN | NOT NULL |
+| seller_bonus_action | TEXT | NOT NULL |
+| driver_bonus_action | TEXT | NOT NULL |
 | delivery_status_before | TEXT | NULL |
-| bonus_status_before | TEXT | NULL |
-| invoice_mode | TEXT | NOT NULL — CHECK: 'soft' or 'delete' |
-| seller_bonus_kept | BOOLEAN | NULL |
-| driver_bonus_kept | BOOLEAN | NULL |
 | notes | TEXT | NULL |
+
+**CHECK**: `seller_bonus_action IN ('keep','cancel_as_debt','cancel_unpaid')`
+**CHECK**: `driver_bonus_action IN ('keep','cancel_as_debt','cancel_unpaid')`
+**ملاحظة**: يعكس شاشة الإلغاء C1 بـ 3 خيارات إلزامية.
 
 ---
 
-### 20. `voice_logs`
-> Voice input transcripts and action log
+## 33. `inventory_counts` — الجرد الدوري
 
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
-| date | TEXT | NOT NULL |
+| product_id | INTEGER | NOT NULL → FK products.id |
+| counted_by | TEXT | NOT NULL |
+| count_date | DATE | NOT NULL |
+| expected_quantity | NUMERIC(19,2) | NOT NULL |
+| actual_quantity | NUMERIC(19,2) | NOT NULL |
+| variance | NUMERIC(19,2) | NOT NULL |
+| notes | TEXT | DEFAULT '' |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() |
+
+---
+
+## 34. `voice_logs` — سجل الإدخال الصوتي
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | SERIAL | PRIMARY KEY |
+| date | DATE | NOT NULL |
 | username | TEXT | NOT NULL |
 | transcript | TEXT | DEFAULT '' |
 | normalized_text | TEXT | DEFAULT '' |
 | action_type | TEXT | DEFAULT '' |
 | action_id | INTEGER | NULL |
 | status | TEXT | DEFAULT 'pending' |
-| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() |
 | debug_json | JSONB | NULL |
 
 ---
 
-### 21. `ai_corrections`
-> Machine learning from user edits
+## 35. `entity_aliases` — أسماء بديلة للكيانات (صوت)
 
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
-| date | TEXT | NOT NULL |
+| entity_type | TEXT | NOT NULL |
+| entity_id | INTEGER | NOT NULL |
+| alias | TEXT | NOT NULL |
+| normalized_alias | TEXT | NOT NULL |
+| source | TEXT | DEFAULT 'user' |
+| frequency | INTEGER | DEFAULT 1 |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() |
+
+**UNIQUE**: `(entity_type, normalized_alias)`
+
+---
+
+## 36. `ai_corrections` + `ai_patterns` — تعلم الصوت
+
+**ai_corrections:**
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | SERIAL | PRIMARY KEY |
+| date | DATE | NOT NULL |
 | username | TEXT | NOT NULL |
 | transcript | TEXT | NOT NULL |
 | ai_output | TEXT | NOT NULL |
 | user_correction | TEXT | NOT NULL |
 | action_type | TEXT | NOT NULL |
 | field_name | TEXT | NOT NULL |
-| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() |
 
----
-
-### 22. `entity_aliases`
-> Learned name mappings for voice recognition
-
-| Column | Type | Constraints |
-|--------|------|-------------|
-| id | SERIAL | PRIMARY KEY |
-| entity_type | TEXT | NOT NULL — 'client', 'product', 'supplier' |
-| entity_id | INTEGER | NOT NULL |
-| alias | TEXT | NOT NULL |
-| normalized_alias | TEXT | NOT NULL |
-| source | TEXT | DEFAULT 'user' |
-| frequency | INTEGER | DEFAULT 1 |
-| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP |
-
-**Unique**: `(entity_type, normalized_alias)`
-
----
-
-### 23. `ai_patterns`
-> Common voice patterns for recognition
+**ai_patterns:**
 
 | Column | Type | Constraints |
 |--------|------|-------------|
@@ -476,335 +720,60 @@
 | correct_value | TEXT | NOT NULL |
 | field_name | TEXT | NOT NULL |
 | frequency | INTEGER | DEFAULT 1 |
-| last_used | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP |
+| last_used | TIMESTAMPTZ | DEFAULT NOW() |
 | username | TEXT | DEFAULT '' |
 
-**Unique**: `(spoken_text, correct_value, field_name, username)`
+**UNIQUE**: `(spoken_text, correct_value, field_name, username)`
 
 ---
 
-## Relationships & Foreign Keys
-
-### Entity-Relationship Diagram (Text)
-
-```
-                           ┌──────────────┐
-                           │    users     │
-                           │  (username)  │
-                           └──────┬───────┘
-                                  │
-                    ┌─────────────┼──────────────┐
-                    │ PK/FK       │ TEXT ref      │ TEXT ref
-                    ▼             ▼               ▼
-          ┌─────────────────┐ ┌────────┐  ┌──────────────┐
-          │ user_bonus_rates│ │bonuses │  │ settlements  │
-          └─────────────────┘ └───┬────┘  └──────────────┘
-                                  │
-                    ┌─────────────┼──────────────┐
-                    │ FK          │ FK            │
-                    ▼             ▼               │
-              ┌──────────┐  ┌────────────┐       │
-              │  sales   │  │ deliveries │       │
-              └────┬─────┘  └─────┬──────┘       │
-                   │              │               │
-          ┌────────┼────────┐     │               │
-          │ FK     │ FK     │ FK  │               │
-          ▼        ▼        ▼     ▼               │
-    ┌─────────┐ ┌─────────┐ ┌──────────┐         │
-    │payments │ │invoices │ │ bonuses  │         │
-    └─────────┘ └─────────┘ └──────────┘         │
-                                                  │
-              ┌──────────┐                        │
-              │purchases │                        │
-              └────┬─────┘                        │
-                   │ FK                           │
-                   ▼                              │
-          ┌──────────────────┐                    │
-          │supplier_payments │                    │
-          └──────────────────┘                    │
-
-   ┌───────────┐        ┌───────────┐
-   │ products  │◄·······│price_hist │  (TEXT ref by name)
-   └───────────┘        └───────────┘
-
-   ┌───────────┐        ┌───────────┐
-   │ suppliers │◄·······│ purchases │  (TEXT ref by name)
-   └───────────┘        └───────────┘
-
-   ┌───────────┐        ┌───────────┐
-   │  clients  │◄·······│   sales   │  (TEXT ref by name)
-   └───────────┘        └───────────┘
-
-   ┌───────────┐  ┌───────────────┐  ┌─────────────┐
-   │cancellat. │  │profit_distrib.│  │invoice_seq  │
-   │→ sales.id │  │(by group_id)  │  │(year,month) │
-   └───────────┘  └───────────────┘  └─────────────┘
-
-   ┌────────────┐  ┌───────────────┐  ┌─────────────┐
-   │ voice_logs │  │ai_corrections │  │ ai_patterns │
-   └────────────┘  └───────────────┘  └─────────────┘
-
-   ┌────────────┐  ┌───────────┐
-   │entity_alias│  │ settings  │
-   └────────────┘  └───────────┘
-```
-
-### Direct Foreign Keys
+## العلاقات (Foreign Keys)
 
 | From | Column | → To | Column | ON DELETE |
 |------|--------|------|--------|-----------|
+| product_images | product_id | products | id | CASCADE |
+| order_items | order_id | orders | id | CASCADE |
+| gift_pool | product_id | products | id | RESTRICT |
+| payments | order_id | orders | id | SET NULL |
+| supplier_payments | purchase_id | purchases | id | RESTRICT |
+| deliveries | order_id | orders | id | RESTRICT |
+| invoices | order_id | orders | id | RESTRICT |
+| invoices | delivery_id | deliveries | id | RESTRICT |
+| bonuses | order_id | orders | id | RESTRICT |
+| bonuses | delivery_id | deliveries | id | RESTRICT |
 | user_bonus_rates | username | users | username | CASCADE |
-| deliveries | sale_id | sales | id | SET NULL |
-| bonuses | sale_id | sales | id | CASCADE |
-| bonuses | delivery_id | deliveries | id | CASCADE |
-| invoices | sale_id | sales | id | CASCADE |
-| invoices | delivery_id | deliveries | id | CASCADE |
-| supplier_payments | purchase_id | purchases | id | — |
-| payments | sale_id | sales | id | (optional) |
-| cancellations | sale_id | sales | id | — |
+| profit_distributions | group_id | profit_distribution_groups | id | CASCADE |
+| cancellations | order_id | orders | id | RESTRICT |
+| inventory_counts | product_id | products | id | RESTRICT |
+| notifications | user_id | users | id | CASCADE |
+| notification_preferences | user_id | users | id | CASCADE |
+| treasury_accounts | parent_account_id | treasury_accounts | id | SET NULL |
+| treasury_movements | from_account_id | treasury_accounts | id | RESTRICT |
+| treasury_movements | to_account_id | treasury_accounts | id | RESTRICT |
+| payment_schedule | order_id | orders | id | CASCADE |
 
-### Text-Based References (no FK constraint)
+**ملاحظة**: ON DELETE = RESTRICT بدل CASCADE لمعظم العلاقات لأن الحذف ناعم دائماً (قرار H5).
+
+### مراجع نصية (بدون FK — تُحدّث ذرياً عند تغيير الاسم)
 
 | From | Column | → To | Column |
 |------|--------|------|--------|
+| orders | client_name | clients | name |
 | purchases | supplier | suppliers | name |
-| sales | client_name | clients | name |
-| payments | client_name | clients | name |
+| order_items | product_name | products | name |
 | deliveries | client_name | clients | name |
 | deliveries | assigned_driver | users | username |
 | bonuses | username | users | username |
 | settlements | username | users | username |
-| profit_distributions | username | users | username |
 | price_history | product_name | products | name |
 
----
-
-## User Roles & Permissions
-
-### Role Hierarchy
-
-```
-ADMIN ─── full control over everything
-  │
-MANAGER ── operational oversight, no settlements/user-mgmt
-  │
-SELLER ─── sales + clients + own bonuses (no cost data)
-  │
-DRIVER ─── deliveries + own bonuses only
-```
-
-### Permission Matrix
-
-| Feature | Admin | Manager | Seller | Driver |
-|---------|:-----:|:-------:|:------:|:------:|
-| Dashboard (summary) | R | R | R | — |
-| Purchases | CRUD | CRUD | — | — |
-| Sales | CRUD | CRUD | CR (own) | — |
-| Edit confirmed sales | Yes | — | — | — |
-| Cancel sales | Any | Reserved only | Own reserved | — |
-| Expenses | CRUD | CRUD | — | — |
-| Deliveries | CRUD | CRUD | R | Update own |
-| Invoices | CRUD + void | R | R (own) | R (own) |
-| Stock / Products | CRUD | CRUD | R (no cost) | — |
-| Clients | CRUD | CRUD | CR | — |
-| Suppliers | CRUD | CRUD | — | — |
-| Payments (client) | CRUD | CRUD | — | — |
-| Bonuses | R (all) | R (all) | R (own) | R (own) |
-| Settlements | CRUD | — | — | — |
-| Profit distributions | CRUD | R | — | — |
-| Users | CRUD | — | — | — |
-| Settings | RW | — | — | — |
-
-**R** = Read, **C** = Create, **U** = Update, **D** = Delete
-
-### Default Landing Pages
-- Admin / Manager → `/summary`
-- Seller → `/sales`
-- Driver → `/deliveries`
+**ملاحظة**: عند تغيير اسم كيان → تحديث شامل ذري لكل المراجع (قرار H4).
 
 ---
 
-## Business Workflow
+## البيانات الافتراضية (Seed Data)
 
-### Complete Flow Diagram
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        BUSINESS WORKFLOW                            │
-│                                                                     │
-│   ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    │
-│   │ PURCHASE │───▶│  STOCK   │───▶│   SALE   │───▶│ DELIVERY │    │
-│   │          │    │ (auto-   │    │          │    │          │    │
-│   │ Admin/   │    │  update) │    │ Seller/  │    │ Driver   │    │
-│   │ Manager  │    │          │    │ Admin/   │    │ confirms │    │
-│   └──────────┘    └──────────┘    │ Manager  │    └────┬─────┘    │
-│        │                          └────┬─────┘         │          │
-│        │                               │               │          │
-│        ▼                               ▼               ▼          │
-│   ┌──────────┐                   ┌──────────┐    ┌──────────┐    │
-│   │ SUPPLIER │                   │ PAYMENT  │    │ INVOICE  │    │
-│   │ PAYMENT  │                   │ (client  │    │ (auto-   │    │
-│   │ (partial)│                   │  pays)   │    │  gen)    │    │
-│   └──────────┘                   └──────────┘    └──────────┘    │
-│                                                       │          │
-│                                                       ▼          │
-│                                                  ┌──────────┐    │
-│                                                  │  BONUS   │    │
-│                                                  │ (seller  │    │
-│                                                  │ + driver)│    │
-│                                                  └────┬─────┘    │
-│                                                       │          │
-│                                                       ▼          │
-│                                                  ┌──────────┐    │
-│                                                  │SETTLEMENT│    │
-│                                                  │ (admin   │    │
-│                                                  │  pays    │    │
-│                                                  │  staff)  │    │
-│                                                  └──────────┘    │
-│                                                                   │
-│   ┌──────────────────────────────────────────────────────────┐    │
-│   │ CANCELLATION (admin only) — reverses sale + delivery     │    │
-│   │ + invoice + bonus with full audit trail                  │    │
-│   └──────────────────────────────────────────────────────────┘    │
-│                                                                   │
-│   ┌──────────────────────────────────────────────────────────┐    │
-│   │ PROFIT DISTRIBUTION (admin) — distributes profit shares  │    │
-│   │ to managers/admins based on configured percentages       │    │
-│   └──────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Step-by-Step Workflow
-
-#### Step 1: Purchase (Admin/Manager)
-1. Admin/Manager creates a purchase from a supplier
-2. System auto-generates ref_code: `PU-YYYYMMDD-NNNNXX`
-3. Product stock is **increased** by purchase quantity
-4. Product buy_price updated via **weighted average**:
-   ```
-   newBuy = (oldStock × oldBuy + newQty × newPrice) / (oldStock + newQty)
-   ```
-5. Price change recorded in `price_history`
-6. Supplier payment can be full or partial → tracked in `supplier_payments`
-
-#### Step 2: Stock (Automatic)
-- Stock levels update automatically on purchase (increase) and delivery (decrease)
-- Sellers see available stock (no cost data)
-- Admin/Manager see full details + low-stock alerts (threshold per product)
-
-#### Step 3: Sale (Seller/Admin/Manager)
-1. Seller creates a sale order for a client
-2. System auto-generates ref_code: `SL-YYYYMMDD-NNNNXX`
-3. Client auto-created if not existing
-4. **Price validation**:
-   - Sellers cannot sell below `sell_price` (recommended price)
-   - Nobody can sell below `buy_price` (absolute floor)
-5. Sale status flow:
-   ```
-   محجوز (reserved) ──▶ مؤكد (confirmed)
-          │
-          └──▶ ملغى (cancelled)
-   ```
-6. Payment status flow:
-   ```
-   pending ──▶ partial ──▶ paid
-      │
-      └──▶ cancelled
-   ```
-
-#### Step 4: Delivery (Driver)
-1. Admin/Manager assigns a driver to the delivery
-2. System auto-generates ref_code: `DL-YYYYMMDD-NNNNXX`
-3. Driver updates status when delivering
-4. VIN required for e-bikes/scooters
-5. Delivery status flow:
-   ```
-   قيد الانتظار (pending) ──▶ قيد التنفيذ (in-progress) ──▶ تم التوصيل (delivered)
-                                        │
-                                        └──▶ ملغى (cancelled)
-   ```
-6. Stock was already reserved at sale creation (no change at delivery confirmation)
-
-#### Step 5: Invoice (Auto-generated)
-1. Invoice created automatically on delivery completion
-2. Ref code format: `INV-YYYYMM-NNN` (monthly sequence)
-3. Atomic numbering via `invoice_sequence` table
-4. Includes: client info, product, quantity, price, VIN, seller, driver
-
-#### Step 6: Bonus Calculation (Automatic)
-1. Triggered on delivery confirmation
-2. Bonus formula:
-   - **Fixed bonus**: from `user_bonus_rates` or global `settings`
-   - **Extra bonus**: `(actual_price - recommended_price) × percentage / 100`
-   - **Total**: fixed + extra
-3. One bonus row per delivery per role (seller + driver)
-4. Per-user rate overrides in `user_bonus_rates` fall back to global settings
-
-#### Step 7: Settlement (Admin)
-1. Admin processes bonus/salary payments to staff
-2. Marks related bonuses as `settled = true`
-3. Records settlement with full audit trail
-
-#### Cancellation Flow (Admin only)
-1. Admin cancels sale with mandatory reason
-2. System records in `cancellations` table:
-   - Previous delivery and bonus states
-   - Invoice handling mode (soft archive or delete)
-   - Refund amount
-3. Related records updated: sale status → cancelled, delivery → cancelled, bonuses optionally reversed
-
-#### Profit Distribution (Admin)
-1. Admin creates distribution for a date range
-2. Multiple recipients per group (each with percentage share)
-3. Percentages must sum to 100%
-4. Tracked per period with unique constraint
-
----
-
-## Indexes & Constraints
-
-### Unique Indexes
-
-| Table | Columns | Condition |
-|-------|---------|-----------|
-| users | username | — |
-| products | name | — |
-| purchases | ref_code | WHERE ref_code != '' |
-| sales | ref_code | WHERE ref_code != '' |
-| deliveries | ref_code | WHERE ref_code != '' |
-| invoices | ref_code | WHERE ref_code != '' |
-| clients | (name, phone) | WHERE phone != '' |
-| clients | (name, email) | WHERE email != '' |
-| suppliers | (name, phone) | WHERE phone != '' |
-| bonuses | (delivery_id, role) | — |
-| entity_aliases | (entity_type, normalized_alias) | — |
-| ai_patterns | (spoken_text, correct_value, field_name, username) | — |
-
-### Performance Indexes
-
-| Table | Index | Columns |
-|-------|-------|---------|
-| sales | sales_payment_status_idx | payment_status |
-| supplier_payments | supplier_payments_purchase_id_idx | purchase_id |
-| profit_distributions | profit_distributions_group_idx | group_id |
-| profit_distributions | profit_distributions_username_idx | username |
-| profit_distributions | profit_distributions_created_idx | created_at DESC |
-| cancellations | cancellations_sale_id_idx | sale_id |
-
-### Check Constraints
-
-| Table | Constraint | Allowed Values |
-|-------|-----------|----------------|
-| sales | payment_status | 'pending', 'partial', 'paid', 'cancelled' |
-| payments | type | 'collection', 'refund', 'advance' |
-| payments | payment_method | 'كاش', 'بنك' |
-| cancellations | invoice_mode | 'soft', 'delete' |
-
----
-
-## Default Settings & Seed Data
-
-### Shop Configuration (settings table)
+### إعدادات المتجر (settings)
 
 | Key | Value |
 |-----|-------|
@@ -816,55 +785,23 @@ DRIVER ─── deliveries + own bonuses only
 | shop_address | 32 Rue du Faubourg du Pont Neuf |
 | shop_city | 86000 Poitiers, France |
 | shop_email | contact@vitesse-eco.fr |
-| shop_website | www.vitesse-eco.fr |
 | vat_rate | 20 |
 | invoice_currency | EUR |
 | seller_bonus_fixed | 10 |
 | seller_bonus_percentage | 50 |
 | driver_bonus_fixed | 5 |
 
-### Default Admin User
+### المستخدم الافتراضي
 
 | Field | Value |
 |-------|-------|
 | username | admin |
-| name | المدير العام |
-| role | admin |
+| name | مدير المشروع |
+| role | pm |
 
-### Voice Recognition - Seed Product Aliases
+### صناديق افتراضية (treasury_accounts)
 
-Pre-configured Arabic aliases for products:
-- V20 Mini, V20 Pro, V20 Limited, S20 Pro, V20 Cross
-- Q30 Pliable, D50, C28, EB30, V20 Max
-- Includes Arabic nicknames and descriptors
-
----
-
-## API Routes Summary
-
-| Route | Methods | Primary Tables | Allowed Roles |
-|-------|---------|---------------|---------------|
-| /api/purchases | GET, POST, PUT | purchases, products, supplier_payments, price_history | admin, manager |
-| /api/purchases/[id]/pay | POST | purchases, supplier_payments | admin, manager |
-| /api/sales | GET, POST, PUT | sales, products, bonuses, deliveries, invoices | admin, manager, seller |
-| /api/sales/[id]/cancel | POST | sales, bonuses, deliveries, invoices, cancellations | admin |
-| /api/sales/[id]/collect | POST | sales, payments | admin, manager, seller |
-| /api/deliveries | GET, POST, PUT | deliveries, sales, bonuses, invoices | all roles |
-| /api/expenses | GET, POST, DELETE | expenses | admin, manager |
-| /api/clients | GET, POST | clients, sales, payments | admin, manager, seller |
-| /api/clients/[id]/collect | POST | clients, sales, payments | admin, manager, seller |
-| /api/products | GET, POST, DELETE | products, price_history | admin, manager |
-| /api/suppliers | GET, POST, DELETE | suppliers, purchases | admin, manager (DELETE ممنوع إذا له مشتريات — BR-33) |
-| /api/payments | GET, POST | payments, sales | admin, manager |
-| /api/bonuses | GET | bonuses, users | all roles |
-| /api/settlements | GET, POST | settlements, bonuses, users | admin |
-| /api/invoices | GET, PUT | invoices, sales, deliveries | all roles |
-| /api/profit-distributions | GET, POST | profit_distributions, users, sales, payments | admin, manager |
-| /api/users | GET, POST, PUT | users, user_bonus_rates | admin (لا DELETE — تعطيل فقط BR-37) |
-| /api/settings | GET, PUT | settings | admin |
-| /api/summary | GET | sales, purchases, payments, expenses, deliveries, clients, suppliers | admin, manager |
-
----
-
-> **Note**: This document is read-only documentation. No database changes were made.
-> Generated: 2026-04-18
+| Name | Type | Owner |
+|------|------|-------|
+| الصندوق الرئيسي — كاش | main_cash | (GM) |
+| الصندوق الرئيسي — بنك | main_bank | (GM) |

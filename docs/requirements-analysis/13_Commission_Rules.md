@@ -1,106 +1,100 @@
 # قواعد العمولات — Commission Rules
 
-> **رقم العنصر**: #12 | **المحور**: ب | **الحالة**: مكتمل
+> **رقم العنصر**: #13 | **المحور**: ب | **الحالة**: قيد التحديث
 
 ---
 
-## متى تُحسب العمولة؟
-- **التوقيت**: عند تأكيد التسليم **فقط** (status = 'تم التوصيل')
-- **قبل التسليم**: لا عمولات تُحسب أو تُكتسب — حتى لو عُدّل البيع
-- **داخل معاملة ذرية**: مع تأكيد البيع + إنشاء الفاتورة + تحصيل الدفعة
-- **منع التكرار**: UNIQUE INDEX على `(delivery_id, role)`
-- **عند إلغاء بيع مؤكد**: عمولة البائع وعمولة السائق تُعكس/تُخصم إلزاميًا (BR-35)
+## المبدأ الأساسي
+
+العمولات تُحسب **حسب فئة المنتج** (وليس موحدة). كل فئة لها معدل مختلف — بيع دراجة ≠ بيع إكسسوار.
 
 ---
 
-## من يستحق العمولة؟
-- **البائع** (seller): الذي أنشأ البيع (created_by)
-- **السائق** (driver): الذي نفّذ التسليم (assigned_driver)
-- **admin و manager**: لا يكسبون عمولات حتى لو أنشأوا البيع
+## هيكل العمولات
+
+### أولوية المعدل (من الأعلى للأدنى)
+
+1. **تجاوز المستخدم** (user_bonus_rates) — إذا وُجد
+2. **قاعدة الفئة** (product_commission_rules) — حسب category
+3. **الإعدادات الافتراضية** (settings) — seller_bonus_fixed, seller_bonus_percentage, driver_bonus_fixed
+
+### توقيت الحساب
+
+- العمولة تُحسب **لحظة تأكيد التسليم فقط** (BR-31)
+- المعدل الساري = **لحظة التسليم** وليس وقت إنشاء الطلب (قرار M14)
+- لا عمولات قبل التسليم — تعديل طلب محجوز لا يولّد عمولات
+
+### أهلية العمولة
+
+| الدور | عمولة بيع | عمولة توصيل | ملاحظة |
+|-------|:---------:|:-----------:|--------|
+| PM/GM/Manager | قابل للتكوين | قابل للتكوين | حسب الإعدادات (قرار M1) |
+| Seller | ✅ | ❌ (افتراضي) | يكسب على مبيعاته |
+| Driver | ❌ | ✅ | يكسب على توصيلاته |
+| Stock Keeper | ❌ | ❌ | لا عمولات |
 
 ---
 
-## صيغة حساب عمولة البائع
+## صيغة عمولة البائع (لكل صنف)
 
 ```
-extraMargin = max(0, actualPrice - recommendedPrice) × quantity
-extraBonus  = extraMargin × sellerPercentage / 100
-fixedTotal  = sellerFixed × quantity
-totalBonus  = fixedTotal + extraBonus
+sellerFixed = override ?? categoryRule ?? settings.seller_bonus_fixed
+sellerPct   = override ?? categoryRule ?? settings.seller_bonus_percentage
+
+fixedTotal  = round2(sellerFixed × quantity)
+extraMargin = max(0, actualPrice - recommendedPrice)
+extraBonus  = round2(extraMargin × quantity × sellerPct / 100)
+
+sellerBonus = round2(fixedTotal + extraBonus)
 ```
 
-**مثال**: بيع 2 دراجة بسعر 1200€ (الموصى 1000€)
+**ملاحظة**: تُحسب لكل order_item بشكل مستقل (BR-30).
+
+---
+
+## صيغة عمولة السائق (لكل توصيل)
+
 ```
-extraMargin = (1200 - 1000) × 2 = 400€
-extraBonus  = 400 × 50% = 200€
-fixedTotal  = 10 × 2 = 20€
-totalBonus  = 20 + 200 = 220€
+driverFixed = override ?? categoryRule ?? settings.driver_bonus_fixed
+driverBonus = round2(driverFixed)
+```
+
+عمولة واحدة لكل توصيل (وليس لكل صنف).
+
+---
+
+## سير عمل العمولة
+
+```
+طلب يُنشأ ──→ لا عمولة (محجوز)
+     │
+تسليم يُؤكد ──→ عمولة تُحسب لكل صنف (seller) + عمولة واحدة (driver)
+     │
+     └──→ settled = false (غير مصروفة)
+               │
+     تسوية ──→ settled = true + settlement_id
 ```
 
 ---
 
-## صيغة حساب عمولة السائق
+## الإلغاء والعمولات (شاشة C1)
 
-```
-fixedTotal = driverFixed × quantity
-totalBonus = fixedTotal    (لا مكون نسبي)
-```
+عند إلغاء طلب، لكل من البائع والسائق:
 
-**مثال**: توصيل 2 دراجة
-```
-fixedTotal = 5 × 2 = 10€
-```
+| حالة العمولة | خيار "إلغاء" | النتيجة |
+|-------------|:------------:|---------|
+| غير مصروفة (settled=false) | نعم | تُحذف |
+| مصروفة (settled=true) | نعم | تُسجل كتسوية سالبة (دين) |
+| أي حالة | إبقاء | لا تغيير |
 
----
-
-## القيم الافتراضية والتجاوزات
-
-### القيم العامة (settings)
-| المعلمة | القيمة الافتراضية |
-|---------|-------------------|
-| seller_bonus_fixed | 10€ |
-| seller_bonus_percentage | 50% |
-| driver_bonus_fixed | 5€ |
-
-### التجاوزات الفردية (user_bonus_rates)
-- admin يمكنه تعيين قيم مخصصة لكل مستخدم
-- إذا وُجد تجاوز → يُستخدم بدل القيمة العامة
-- إذا لم يوجد → القيمة العامة
-
-### أولوية البحث
-```
-1. user_bonus_rates WHERE username = X → إن وُجد → استخدم القيم
-2. settings (seller_bonus_fixed, etc.) → الافتراضي
-```
+**لا قيم افتراضية** — يجب تحديد الخيار يدوياً (قرار C1).
 
 ---
 
-## حالات العمولة
+## القيود
 
-| الحالة | settled | settlement_id | المعنى |
-|--------|---------|---------------|--------|
-| مستحق (غير مصروف) | false | NULL | بانتظار التسوية |
-| مصروف | true | مرتبط | تم الصرف عبر تسوية |
-
----
-
-## صرف العمولات (التسوية)
-
-1. المدير يختار نوع التسوية (بائع/سائق) + المستخدم
-2. النظام يعرض الرصيد المتاح
-3. المدير يدخل المبلغ (≤ الرصيد)
-4. النظام يقفل العمولات (FOR UPDATE)
-5. وسم FIFO: الأقدم أولًا بـ settled=true + settlement_id
-6. إدراج سجل تسوية
-
----
-
-## استرداد العمولات عند الإلغاء
-
-### عمولة غير مصروفة
-- **خيار remove**: حذف سجل العمولة
-- **خيار keep**: ترك العمولة للتسوية العادية
-
-### عمولة مصروفة
-- تسوية سالبة (دين استرداد) تُخصم من الرواتب المستقبلية
-- **الصيغة**: `availableCredit = unsettledTotal + recoveryDebt` (الدين سالب)
+- seller_percentage: 0-100 (CHECK constraint — BR-34/M5)
+- seller_fixed ≥ 0
+- driver_fixed ≥ 0
+- bonuses.order_id = NOT NULL دائماً (M12)
+- UNIQUE: (delivery_id, role, item) — عمولة واحدة لكل صنف لكل دور لكل توصيل

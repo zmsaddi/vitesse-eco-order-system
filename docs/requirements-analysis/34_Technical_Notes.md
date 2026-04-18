@@ -1,80 +1,52 @@
-# الملاحظات التقنية — Technical Notes & Assumptions
+# ملاحظات تقنية — Technical Notes
 
-> **رقم العنصر**: #33 | **المحور**: ح | **الحالة**: مكتمل
-
----
-
-## 1. NUMERIC يُرجع كـ STRING
-
-- **المشكلة**: @vercel/postgres يُرجع أعمدة NUMERIC(19,2) كـ string
-- **الخطر**: `"5.00" + "3.00"` = `"5.003.00"` بدل `8.00`
-- **الحل**: `parseFloat()` قبل أي عملية حسابية — يُفضل helper مركزي
-- **التأثير**: جميع أعمدة المال والكميات
-- **الدقة المعتمدة**: 0.01€ — جميع المقارنات والتقريب والأرصدة بمنزلتين عشريتين (BR-38)
+> **رقم العنصر**: #34 | **المحور**: ح | **الحالة**: قيد التحديث
 
 ---
 
-## 2. التواريخ TEXT وليست DATE
+## Stack التقني
 
-- **التنسيق**: ISO 8601 TEXT (YYYY-MM-DD)
-- **السبب**: بساطة التخزين والمقارنة
-- **الأثر**: لا يوجد تحقق على مستوى قاعدة البيانات لصحة التاريخ
-- **التحقق**: Zod schema يتحقق من الصيغة
+| الطبقة | التقنية |
+|--------|---------|
+| Framework | Next.js 16 + TypeScript strict (App Router) |
+| CSS | Tailwind CSS v4 + shadcn/ui |
+| ORM | Drizzle ORM + @neondatabase/serverless |
+| Validation | Zod v4 (مشترك frontend + backend) |
+| Data Fetching | TanStack Query (React Query) |
+| State | Zustand (إشعارات + تفضيلات فقط) |
+| Real-time | SSE مع polling fallback (Vercel timeout ~60s) |
+| Auth | Auth.js v5 |
+| Charts | Recharts |
+| Voice | Groq (Whisper + Llama) |
 
----
+## قيود الاستضافة المجانية
 
-## 3. العلاقات النصية (TEXT References)
+- Vercel Free: 100GB bandwidth, serverless functions
+- Neon Free: 0.5GB storage, 190 compute hours/month
+- لا Redis — rate limiting في الذاكرة (Map)
+- الصور في Vercel Blob/Cloudinary (ليس DB)
 
-بعض العلاقات بين الجداول عبر اسم نصي وليس FK:
+## مبادئ الكود
 
-| من | إلى | المرجع |
-|----|-----|--------|
-| purchases.supplier | suppliers.name | نص |
-| sales.client_name | clients.name | نص |
-| bonuses.username | users.username | نص |
-| price_history.product_name | products.name | نص |
+1. **لا ملف يتجاوز 300 سطر** — تقسيم بـ domain modules
+2. **TypeScript strict** — كل شيء مُعرّف النوع
+3. **الأرقام المالية**: NUMERIC(19,2) → Drizzle يعيدها كـ string → parseFloat
+4. **التواريخ**: DATE / TIMESTAMPTZ (ليس TEXT) — قرار M4
+5. **المنطقة الزمنية**: Europe/Paris — قرار L3
+6. **round2()**: Math.round((x + ε) × 100) / 100
+7. **كل الأرقام TTC** — TVA فقط عند الفاتورة (H1)
 
-**الأثر**: لا cascading تلقائي — إذا تغير اسم المنتج/العميل/المورد، السجلات القديمة تحتفظ بالاسم القديم
+## هيكل المشروع
 
----
-
-## 4. Next.js App Router
-
-- **الإصدار**: Next.js مع App Router (app/ directory)
-- **API Routes**: Route Handlers (app/api/*/route.js)
-- **الصفحات**: Client Components (use client)
-- **التنسيق**: CSS Modules + Tailwind-like inline styles
-
----
-
-## 5. اتجاه RTL
-
-- **الافتراضي**: من اليمين لليسار (RTL)
-- **استثناءات LTR**: حقول الهاتف، الإيميل، VIN، الأسماء اللاتينية
-- **VIN Input**: CSS `text-transform: uppercase` بدل JS (لمنع قفز المؤشر على الموبايل)
-
----
-
-## 6. Serverless Constraints
-
-- **Cold Start**: كل طلب قد يبدأ من الصفر
-- **Rate Limit Map**: في الذاكرة — يُمسح عند cold start
-- **Connection Pool**: Neon يدير pooling عبر proxy
-- **Timeout**: حدود Vercel على وقت التنفيذ
-
----
-
-## 7. الترحيل (Migrations)
-
-- **النمط**: `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` (idempotent)
-- **الآمان**: يمكن تشغيلها عدة مرات بدون أثر جانبي
-- **المساعد**: `ignoreExpectedDdl()` يبتلع الأخطاء المتوقعة (عمود موجود مسبقًا)
-- **التشغيل**: عند أول طلب (initDatabase) أو عبر GET /api/init
-
----
-
-## 8. البذور الأولية (Seed Data)
-
-- **المستخدم الافتراضي**: admin / admin123 (يجب تغييره بعد التثبيت)
-- **أسماء المنتجات المستعارة**: 10+ منتجات مع أسماء عربية مبدئية
-- **الإعدادات**: بيانات الشركة + نسب العمولات + TVA
+```
+src/
+  db/schema/     (~18 ملف pgTable)
+  db/client.ts   (اتصال + withTx)
+  modules/       (~18 مجلد × queries.ts + schema.ts + hooks.ts)
+  lib/           (auth, money, utils, constants, api-helpers)
+  voice/         (5 ملفات)
+  components/    (layout, data-table, forms, dialogs, ui)
+  stores/        (notification, preference)
+  providers/     (query, auth)
+  types/
+```

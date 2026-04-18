@@ -1,6 +1,6 @@
-# توثيق نقاط الـ API — API Endpoints Documentation
+# نقاط الـ API — API Endpoints
 
-> **رقم العنصر**: #34 | **المحور**: ح | **الحالة**: مكتمل
+> **رقم العنصر**: #35 | **المحور**: ح | **الحالة**: قيد التحديث
 
 ---
 
@@ -8,135 +8,108 @@
 
 | المسار | Method | الأدوار | الوصف |
 |--------|--------|---------|-------|
-| `/api/auth/[...nextauth]` | GET/POST | عام | NextAuth — تسجيل دخول/خروج |
+| `/api/auth/[...nextauth]` | GET/POST | عام | Auth.js v5 — تسجيل دخول/خروج |
 
----
-
-## المستخدمين
+## الطلبات (Orders — يحل محل Sales)
 
 | المسار | Method | الأدوار | الوصف |
 |--------|--------|---------|-------|
-| `/api/users` | GET | admin | جلب جميع المستخدمين |
-| `/api/users` | POST | admin | إنشاء مستخدم |
-| `/api/users` | PUT | admin | تعديل مستخدم (اسم، دور، كلمة مرور، تفعيل) |
-| `/api/users` | PUT (toggle active) | admin | تعطيل/تفعيل مستخدم (لا حذف نهائي — BR-37) |
-| `/api/users/bonus-rates` | GET | admin | جلب تجاوزات العمولة |
-| `/api/users/bonus-rates` | PUT | admin | تعيين/تعديل تجاوز عمولة |
-| `/api/users/bonus-rates` | DELETE | admin | حذف تجاوز عمولة |
-| `/api/users/eligible-for-settlement` | GET | admin | المستخدمون المؤهلون للتسوية |
-
----
-
-## المنتجات
-
-| المسار | Method | الأدوار | الوصف | ملاحظة |
-|--------|--------|---------|-------|--------|
-| `/api/products` | GET | الكل | جلب المنتجات | seller: بدون buy_price |
-| `/api/products` | POST | admin, manager, seller | إنشاء منتج | seller: shell فقط |
-| `/api/products` | PUT | admin | تعديل منتج (sell_price, category, threshold) | buy_price غير قابل للتعديل |
-| `/api/products` | DELETE | admin | حذف منتج | ممنوع إذا stock > 0 |
-
----
+| `/api/orders` | GET | الكل (مفلتر) | جلب الطلبات (seller: خاصتي، driver: مرتبطة) |
+| `/api/orders` | POST | pm,gm,manager,seller | إنشاء طلب متعدد الأصناف |
+| `/api/orders` | PUT | pm,gm,manager,seller | تعديل طلب محجوز فقط (BR-27/28) |
+| `/api/orders/[id]/cancel` | POST | pm,gm,manager,seller(خاصتي) | إلغاء طلب — شاشة C1 |
+| `/api/orders/[id]/collect` | POST | pm,gm,manager,seller | تحصيل دفعة على طلب محدد |
 
 ## المشتريات
 
 | المسار | Method | الأدوار | الوصف |
 |--------|--------|---------|-------|
-| `/api/purchases` | GET | admin, manager | جلب المشتريات (فلتر بالمورد اختياري) |
-| `/api/purchases` | POST | admin, manager | إنشاء مشترى (يحدث المخزون + الأسعار) |
-| `/api/purchases` | PUT | admin | تعديل مشترى |
-| `/api/purchases` | DELETE | admin | حذف مشترى (يعكس المخزون) |
-| `/api/purchases/[id]/pay` | GET | admin, manager | جلب سجل دفعات المورد |
-| `/api/purchases/[id]/pay` | POST | admin, manager | تسجيل دفعة للمورد |
+| `/api/purchases` | GET | pm,gm,manager,stock_keeper(👁) | جلب المشتريات |
+| `/api/purchases` | POST | pm,gm,manager | إنشاء مشتريات (يحدث المخزون + الأسعار) |
+| `/api/purchases` | PUT | pm,gm | تعديل مشتريات |
+| `/api/purchases` | DELETE | pm,gm | حذف مشتريات — شاشة C5 |
+| `/api/purchases/[id]/pay` | POST | pm,gm,manager | دفعة للمورد |
 
----
-
-## المبيعات
+## التوصيلات + المهام
 
 | المسار | Method | الأدوار | الوصف |
 |--------|--------|---------|-------|
-| `/api/sales` | GET | الكل | جلب المبيعات (seller: الخاصة فقط) |
-| `/api/sales` | POST | admin, manager, seller | إنشاء بيع (يحجز المخزون + ينشئ توصيل) |
-| `/api/sales` | PUT | admin, manager, seller | تعديل بيع |
-| `/api/sales` | DELETE | admin, manager, seller | حذف/إلغاء بيع (حسب canCancelSale) |
-| `/api/sales/[id]/cancel` | GET | admin, manager | معاينة الإلغاء (بدون تنفيذ) |
-| `/api/sales/[id]/cancel` | POST | admin, manager | تنفيذ الإلغاء (12 خطوة) |
-| `/api/sales/[id]/collect` | POST | admin, manager, seller | تحصيل دفعة على بيع محدد |
+| `/api/deliveries` | GET | الكل (مفلتر) | جلب التوصيلات |
+| `/api/deliveries` | PUT | pm,gm,manager,driver | تحديث حالة (driver: تأكيد خاصتي) |
+| `/api/driver-tasks` | GET | pm,gm,manager,driver(خاصتي) | جلب المهام |
+| `/api/driver-tasks` | POST | pm,gm,manager | تعيين مهمة |
+| `/api/driver-tasks` | PUT | driver | تحديث حالة مهمتي |
 
----
-
-## التوصيل
+## المنتجات + الكتالوج
 
 | المسار | Method | الأدوار | الوصف |
 |--------|--------|---------|-------|
-| `/api/deliveries` | GET | الكل | جلب التسليمات (مفلترة حسب الدور) |
-| `/api/deliveries` | POST | admin, manager | إنشاء توصيل |
-| `/api/deliveries` | PUT | admin, manager, driver | تحديث (driver: تم التوصيل فقط) |
-| `/api/deliveries` | DELETE | admin | حذف/إلغاء توصيل |
+| `/api/products` | GET | الكل | جلب المنتجات (seller: بدون buy_price) |
+| `/api/products` | POST | pm,gm,manager,stock_keeper | إنشاء منتج |
+| `/api/products` | PUT | pm,gm,manager,stock_keeper(بدون أسعار) | تعديل منتج |
+| `/api/products/[id]/images` | POST | pm,gm,manager,stock_keeper | رفع صور |
+| `/api/products/[id]/images` | DELETE | pm,gm,manager | حذف صورة |
+| `/api/catalog/pdf` | GET | pm,gm,manager,seller,stock_keeper | توليد PDF كتالوج (3 لغات) |
+| `/api/gift-pool` | GET/PUT | pm,gm | إدارة مجمع الهدايا |
 
----
-
-## العملاء
-
-| المسار | Method | الأدوار | الوصف |
-|--------|--------|---------|-------|
-| `/api/clients` | GET | الكل | جلب العملاء |
-| `/api/clients` | POST | admin, manager, seller | إنشاء عميل (مع كشف التكرار) |
-| `/api/clients` | PUT | admin | تعديل عميل |
-| `/api/clients` | DELETE | admin | حذف عميل (ممنوع إذا له مبيعات) |
-| `/api/clients/[id]/collect` | POST | admin, manager, seller | تحصيل FIFO من العميل |
-
----
-
-## الدفعات والفواتير والعمولات
+## العملاء + الموردين
 
 | المسار | Method | الأدوار | الوصف |
 |--------|--------|---------|-------|
-| `/api/payments` | GET | admin, manager | جلب الدفعات |
-| `/api/payments` | POST | admin, manager | إنشاء دفعة |
-| `/api/payments` | DELETE | admin | حذف دفعة |
-| `/api/invoices` | GET | الكل | جلب الفواتير (مفلترة حسب الدور) |
-| `/api/invoices` | PUT | admin | إلغاء فاتورة (void) |
-| `/api/bonuses` | GET | الكل | جلب العمولات (seller/driver: الخاصة) |
+| `/api/clients` | GET | pm,gm,manager,seller(👁) | جلب العملاء |
+| `/api/clients` | POST | pm,gm,manager,seller | إنشاء عميل |
+| `/api/clients` | PUT | pm,gm,manager | تعديل عميل |
+| `/api/clients/[id]/collect` | POST | pm,gm,manager,seller | تحصيل FIFO |
+| `/api/suppliers` | GET | pm,gm,manager,stock_keeper(👁) | جلب الموردين |
+| `/api/suppliers` | POST | pm,gm,manager | إنشاء مورد |
+| `/api/suppliers` | DELETE | pm,gm | حذف مورد (BR-14) |
 
----
-
-## التسويات وتوزيع الأرباح
+## المالية
 
 | المسار | Method | الأدوار | الوصف |
 |--------|--------|---------|-------|
-| `/api/settlements` | GET | admin | جلب التسويات |
-| `/api/settlements` | POST | admin | إنشاء تسوية |
-| `/api/settlements/available-credit` | GET | admin | الرصيد المتاح للمستخدم |
-| `/api/profit-distributions` | GET | admin, manager | جلب التوزيعات |
-| `/api/profit-distributions` | POST | admin | إنشاء توزيع |
-| `/api/profit-distributions/eligible-users` | GET | admin, manager | المستخدمون المؤهلون |
-| `/api/profit-distributions/collected-revenue` | GET | admin, manager | الإيراد المحصّل للفترة |
-| `/api/profit-distributions/share-config` | GET/PUT | admin | إعداد حصص المشاركة |
-
----
+| `/api/invoices` | GET | الكل (مفلتر) | جلب الفواتير |
+| `/api/invoices/[id]/pdf` | GET | الكل | PDF فاتورة (فرنسي) |
+| `/api/treasury` | GET | pm,gm,manager(صندوقي),driver(عهدتي) | أرصدة + حركات |
+| `/api/treasury/transfer` | POST | pm,gm | تحويل بين صناديق |
+| `/api/treasury/reconcile` | POST | pm,gm,manager | تسوية يومية |
+| `/api/treasury/handover` | POST | driver(تسليم),manager(استلام) | تسليم أموال |
+| `/api/settlements` | GET/POST | pm,gm | التسويات والمكافآت |
+| `/api/distributions` | GET | pm,gm,manager(👁) | توزيعات الأرباح |
+| `/api/distributions` | POST | pm,gm | إنشاء توزيع |
+| `/api/bonuses` | GET | الكل (مفلتر) | العمولات |
 
 ## النظام
 
 | المسار | Method | الأدوار | الوصف |
 |--------|--------|---------|-------|
-| `/api/expenses` | GET/POST | admin, manager | المصاريف |
-| `/api/expenses` | PUT/DELETE | admin | تعديل/حذف مصروف |
-| `/api/suppliers` | GET/POST | admin, manager | الموردين |
-| `/api/suppliers` | DELETE | admin | حذف مورد (ممنوع إذا له مشتريات — BR-33) |
-| `/api/settings` | GET | الكل | جلب الإعدادات |
-| `/api/settings` | PUT | admin | تعديل الإعدادات |
-| `/api/summary` | GET | الكل | بيانات لوحة التحكم (مفلترة حسب الدور) |
-| `/api/health` | GET | عام | فحص الصحة |
-| `/api/init` | GET | admin | تهيئة قاعدة البيانات (idempotent) |
-| `/api/init` | POST | admin | إعادة تعيين (مُقيد بـ ALLOW_DB_RESET) |
+| `/api/users` | GET/POST/PUT | pm,gm | إدارة المستخدمين (لا DELETE) |
+| `/api/users/bonus-rates` | GET/PUT/DELETE | pm,gm | تجاوزات العمولة |
+| `/api/settings` | GET/PUT | pm,gm | الإعدادات |
+| `/api/permissions` | GET/PUT | pm | الصلاحيات |
+| `/api/backup` | GET/POST | pm,gm | تنزيل/استعادة نسخة (C4) |
+| `/api/health` | GET | عام | DB latency + timestamp |
+| `/api/expenses` | GET/POST/PUT/DELETE | pm,gm,manager | المصاريف |
+| `/api/inventory/count` | GET/POST | pm,gm,manager,stock_keeper | الجرد |
 
----
+## الإشعارات + النشاطات
+
+| المسار | Method | الأدوار | الوصف |
+|--------|--------|---------|-------|
+| `/api/notifications` | GET | الكل | إشعاراتي |
+| `/api/notifications/stream` | GET (SSE) | الكل | بث فوري |
+| `/api/notifications/preferences` | GET/PUT | الكل | تفضيلاتي |
+| `/api/activity` | GET | pm,gm,manager(👁) | سجل النشاطات |
 
 ## الصوت
 
 | المسار | Method | الأدوار | الوصف |
 |--------|--------|---------|-------|
-| `/api/voice/process` | POST | admin, manager, seller | معالجة تسجيل صوتي |
-| `/api/voice/learn` | POST | الكل | تسجيل تصحيحات المستخدم |
-| `/api/voice/learn` | PUT | الكل | ربط action_id بسجل صوتي |
+| `/api/voice/process` | POST | pm,gm,manager,seller | معالجة صوت → كيانات |
+| `/api/voice/learn` | POST/PUT | الكل | تعلم + ربط action_id |
+
+## قواعد العمولات
+
+| المسار | Method | الأدوار | الوصف |
+|--------|--------|---------|-------|
+| `/api/commission-rules` | GET/POST/PUT/DELETE | pm,gm | قواعد العمولة حسب الفئة |
