@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__ide__getDiagnostics",
+      "Bash(shopt -s dotglob)",
+      "Bash(mv temp-init/* temp-init/.* .)",
+      "Bash(rmdir temp-init:*)",
+      "Bash(npm install:*)",
+      "Bash(rm -f README.md AGENTS.md CLAUDE.md)",
+      "Bash(rm -f src/app/favicon.ico src/app/globals.css src/app/layout.tsx src/app/page.tsx)"
+    ]
+  }
+}

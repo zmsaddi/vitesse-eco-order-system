@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node scripts/regex-test.mjs)",
+      "Bash(rm scripts/regex-test.mjs)",
+      "Bash(ls vitest.config*)",
+      "Bash(npx vitest:*)",
+      "Bash(node -e ':*)"
+    ]
+  }
+}
