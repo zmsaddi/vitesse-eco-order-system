@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { authConfig } from "./auth.config";
+import { buildForwardHeaders } from "./middleware-headers";
 import type { Role } from "./lib/session-claims";
 
 // D-59: middleware reads role from JWT — NO DB access (keeps invocation < 10ms).
@@ -29,12 +30,15 @@ const ROLE_HOMES: Record<Role, string> = {
 
 // Forward request with `x-pathname` header so Server Components can read the
 // current path via next/headers (used by AppLayout → Sidebar for active-link highlight).
-// Next.js does not expose the request pathname to RSC by default; this is the standard
-// middleware pattern for it.
-function nextWithPath(path: string): NextResponse {
-  const requestHeaders = new Headers();
-  requestHeaders.set("x-pathname", path);
-  return NextResponse.next({ request: { headers: requestHeaders } });
+//
+// CRITICAL: `buildForwardHeaders` COPIES all original headers first (cookies, auth,
+// user-agent, accept-*, etc.) then adds x-pathname. Phase 2.1 had a regression where
+// Headers() was empty — dropping Auth.js session cookies + everything else. Phase 2.1.1
+// fixes it + adds unit tests in middleware-headers.test.ts.
+function nextWithPath(req: NextRequest, path: string): NextResponse {
+  return NextResponse.next({
+    request: { headers: buildForwardHeaders(req.headers, path) },
+  });
 }
 
 export default authMiddleware((req) => {
@@ -43,7 +47,7 @@ export default authMiddleware((req) => {
 
   // Allow public paths through (still propagate x-pathname for consistency).
   if (PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`))) {
-    return nextWithPath(path);
+    return nextWithPath(req, path);
   }
 
   // All other routes require auth.
@@ -69,7 +73,7 @@ export default authMiddleware((req) => {
     }
   }
 
-  return nextWithPath(path);
+  return nextWithPath(req, path);
 });
 
 export const config = {
