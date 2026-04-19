@@ -32,8 +32,9 @@ export default defineConfig({
         "src/db/seed.ts",        // Declarative seed data
         "src/components/**",     // UI components — covered by E2E + a11y (Phase 1+ once Playwright lands)
         "src/lib/env.ts",        // env var setup — smoke via build + integration
-        "src/modules/**/dto.ts", // Zod schemas — implicit coverage
-        "src/modules/**/mappers.ts", // Trivial projections
+        "src/modules/**/mappers.ts", // Trivial projections — covered via integration
+        "src/modules/**/service.ts", // Business logic — covered by integration tests (require DB)
+        "src/modules/users/nav.ts",  // Trivial re-export — covered via integration
         "src/types/**",
         "**/*.d.ts",
       ],

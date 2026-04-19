@@ -100,14 +100,37 @@ describe.skipIf(!HAS_DB)(
     });
 
     // ─────────────────────────────────────────────────────
-    // Group B — real credentials → authorize → jwt → session
+    // Group B — credentials → authorize → jwt → session
     //
-    // We replicate the authorize() logic (same dependencies) rather than invoking
-    // NextAuth() which would wire HTTP handlers. This covers the data chain;
-    // E2E (Playwright with cookie jar) remains Phase 1+ deferred.
+    // ⚠ KNOWN CONSTRAINT (accepted post-Phase-1a.1, developer review):
+    //   `loadAuthorize()` below REPLICATES the production authorize() logic
+    //   from src/auth.ts rather than invoking it. Both paths share the same
+    //   dependencies (`withRead`, `users` schema, `verifyPassword`), but they
+    //   are two code sites that can drift.
+    //
+    //   The production path in src/auth.ts may change (e.g. new validation,
+    //   rate-limit check, audit log hook) while this test stays green and
+    //   exercises a stale copy of the logic.
+    //
+    // REQUIRED ACTION on the NEXT touch to src/auth.ts or this file:
+    //   Choose one:
+    //   (a) Replace loadAuthorize() with a call into the REAL provider — e.g.
+    //       extract the Credentials provider from src/auth.ts and invoke its
+    //       `authorize` method directly. This eliminates the drift risk.
+    //   (b) Rename this group from "credentials → authorize" to something
+    //       narrower (e.g. "credentials-chain simulation") and remove the
+    //       word "authorize" from the case titles, so the test does not
+    //       pretend to exercise the production path it merely mirrors.
+    //
+    // Do NOT ship a Phase 2+ auth change that keeps this simulation name.
     // ─────────────────────────────────────────────────────
 
-    describe("Group B — credentials → authorize → jwt → session", () => {
+    describe("Group B — credentials-chain simulation + Auth.js callbacks", () => {
+      // ^ Renamed vs Phase 1a.1 to remove the "authorize" verb from the group
+      //   title. Individual case titles below still say "authorize" where they
+      //   genuinely exercise authorize-shaped logic; those are scheduled for
+      //   rewording when the constraint above is honored.
+
       async function loadAuthorize() {
         vi.resetModules();
         const envMod = await import("@/lib/env");

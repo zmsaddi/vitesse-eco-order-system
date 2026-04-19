@@ -1,20 +1,19 @@
 import Link from "next/link";
-import { NAV_BY_ROLE } from "./nav-items";
+import type { NavItem } from "@/modules/users/nav";
 import type { Role } from "@/lib/session-claims";
 
 type SidebarProps = {
-  role: Role;
+  items: NavItem[];
+  role: Role; // for the header role label only
   currentPath?: string;
 };
 
 /**
- * Role-filtered Sidebar (RTL by default via html dir).
- * Phase 1 MVP: static list from NAV_BY_ROLE (data-driven via permissions table
- * comes in Phase 2 when we add a /api/v1/me endpoint).
+ * Pure renderer — receives pre-filtered nav items as a prop.
+ * Does NOT know which role sees what; that lives in `getNavForRole` (server-side).
+ * Easy to swap for a DB-driven filter later without touching this component.
  */
-export function Sidebar({ role, currentPath }: SidebarProps) {
-  const items = NAV_BY_ROLE[role];
-
+export function Sidebar({ items, role, currentPath }: SidebarProps) {
   return (
     <nav
       aria-label="الشريط الجانبي"
