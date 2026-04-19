@@ -239,3 +239,34 @@ The user-edit validator unification was the right refactor — shared Zod schema
 Integration tests are the most important addition. 15 new cases lock in contracts for POST/PUT on both domains, including the cross-client-collision case that would regress if Fix 2 is ever rolled back.
 
 Nothing was deferred that the review asked for. Nothing was over-claimed.
+
+---
+
+## Errata (added post-commit — 2026-04-20)
+
+The following claims in the body above were **corrected by Phase 2b.1.1**
+(commit `bd8f5e2`). The body text is left intact as a historical snapshot;
+read this section alongside it when referencing the report.
+
+### §2 "Fix 2 + 3" — PG error property name
+
+- **What the body says**: `mapUniqueViolation(err)` "catches PG 23505 (unique_violation), reads `constraint_name` from the error, maps to the same `ConflictError`".
+- **What was actually true after Phase 2b.1**: the mapper read `pgErr.constraint_name`, a property node-postgres / `@neondatabase/serverless` **do not populate**. The real property is `pgErr.constraint`.
+- **Net impact**: the mapper still returned `409 DUPLICATE_CLIENT` on a real race (because `code === "23505"` was correct), but **axis detection was broken** — always defaulted to `"phone"`. An email-index race would have surfaced the Arabic phone-flavored message.
+- **Correction (Phase 2b.1.1, commit `bd8f5e2`)**:
+  - `src/modules/clients/service.ts`: key renamed to `constraint` (and read as such).
+  - `mapUniqueViolation` is now exported.
+  - `src/modules/clients/service.test.ts` added with 8 direct unit tests covering both axes + passthrough + missing-constraint fail-safe + a **regression guard** that fails if anyone reads `constraint_name` again.
+
+### §6 unit-test count
+
+- **Body says**: 104/104 unit tests.
+- **Post-2b.1.1**: **112/112** unit tests (+8 `mapUniqueViolation` cases).
+- Integration count (40 total, 2 pass + 38 skipped) is unchanged.
+
+### §12.2 accepted gap
+
+- **Body says**: "`mapUniqueViolation` has no unit test — because constructing a realistic PG error is awkward in unit scope."
+- **Post-2b.1.1**: resolved. 8 direct unit tests construct fabricated PG error shapes and validate both axes + error passthrough paths.
+
+No other body claims are affected by Phase 2b.1.1.
