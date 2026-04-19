@@ -20,6 +20,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { href: "/invoices", labelAr: "الفواتير" },
     { href: "/treasury", labelAr: "الصناديق" },
     { href: "/settlements", labelAr: "التسويات" },
+    { href: "/users", labelAr: "المستخدمون" },
     { href: "/settings", labelAr: "الإعدادات" },
   ],
   gm: [
@@ -32,6 +33,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { href: "/invoices", labelAr: "الفواتير" },
     { href: "/treasury", labelAr: "الصناديق" },
     { href: "/settlements", labelAr: "التسويات" },
+    { href: "/users", labelAr: "المستخدمون" },
   ],
   manager: [
     { href: "/action-hub", labelAr: "مركز العمل" },

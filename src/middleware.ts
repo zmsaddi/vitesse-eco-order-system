@@ -27,13 +27,23 @@ const ROLE_HOMES: Record<Role, string> = {
   stock_keeper: "/preparation",
 };
 
+// Forward request with `x-pathname` header so Server Components can read the
+// current path via next/headers (used by AppLayout → Sidebar for active-link highlight).
+// Next.js does not expose the request pathname to RSC by default; this is the standard
+// middleware pattern for it.
+function nextWithPath(path: string): NextResponse {
+  const requestHeaders = new Headers();
+  requestHeaders.set("x-pathname", path);
+  return NextResponse.next({ request: { headers: requestHeaders } });
+}
+
 export default authMiddleware((req) => {
   const { nextUrl } = req;
   const path = nextUrl.pathname;
 
-  // Allow public paths through.
+  // Allow public paths through (still propagate x-pathname for consistency).
   if (PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`))) {
-    return NextResponse.next();
+    return nextWithPath(path);
   }
 
   // All other routes require auth.
@@ -59,7 +69,7 @@ export default authMiddleware((req) => {
     }
   }
 
-  return NextResponse.next();
+  return nextWithPath(path);
 });
 
 export const config = {

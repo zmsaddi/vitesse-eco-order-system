@@ -1,10 +1,11 @@
-import { requireRole } from "@/lib/session-claims";
+import { enforcePageRole } from "@/lib/session-claims";
 
 // D-72 Action Hub — admin-only landing (pm/gm/manager).
-// Phase 1: empty shell with copy. Real urgent-actions + recent-activity + team-status sections land in Phase 3+.
+// Phase 2.1: enforcePageRole redirects wrong-role visitors to their own role-home
+// (previously threw PermissionError → Next.js error page).
 
 export default async function ActionHubPage() {
-  const claims = await requireRole(undefined, ["pm", "gm", "manager"]);
+  const claims = await enforcePageRole(["pm", "gm", "manager"]);
 
   return (
     <div className="space-y-6">

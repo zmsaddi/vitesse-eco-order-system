@@ -1,8 +1,8 @@
-import { requireRole } from "@/lib/session-claims";
+import { enforcePageRole } from "@/lib/session-claims";
 
 // Seller/admin orders landing shell. Phase 3 replaces with real DataTable + multi-item form.
 export default async function OrdersPage() {
-  await requireRole(undefined, ["pm", "gm", "manager", "seller"]);
+  await enforcePageRole(["pm", "gm", "manager", "seller"]);
   return (
     <div className="space-y-4">
       <header className="flex items-center justify-between">

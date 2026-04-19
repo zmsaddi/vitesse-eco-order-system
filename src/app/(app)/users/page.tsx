@@ -1,4 +1,4 @@
-import { requireRole } from "@/lib/session-claims";
+import { enforcePageRole } from "@/lib/session-claims";
 import { withRead } from "@/db/client";
 import { listActiveUsers } from "@/modules/users/service";
 import { PageShell } from "@/components/ui/PageShell";
@@ -49,7 +49,7 @@ const COLUMNS: Column<UserDto>[] = [
 ];
 
 export default async function UsersPage() {
-  await requireRole(undefined, ["pm", "gm"]);
+  await enforcePageRole(["pm", "gm"]);
   const users = await withRead(undefined, (db) => listActiveUsers(db));
 
   return (

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { DbHandle, DbTx } from "@/db/client";
 import { users } from "@/db/schema";
 import { NotFoundError } from "@/lib/api-errors";
@@ -28,8 +28,12 @@ export async function listActiveUsers(db: DbHandle): Promise<UserDto[]> {
 }
 
 /**
- * Mark the current user as onboarded (D-49). Idempotent.
+ * Mark the current user as onboarded (D-49). Idempotent — only writes when
+ * onboardedAt IS NULL, so repeated calls never overwrite the original timestamp.
  */
 export async function markOnboarded(tx: DbTx, userId: number): Promise<void> {
-  await tx.update(users).set({ onboardedAt: new Date() }).where(eq(users.id, userId));
+  await tx
+    .update(users)
+    .set({ onboardedAt: new Date() })
+    .where(and(eq(users.id, userId), isNull(users.onboardedAt)));
 }
