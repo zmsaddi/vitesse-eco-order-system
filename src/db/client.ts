@@ -1,5 +1,8 @@
 import { Pool, neonConfig } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-serverless";
+import { drizzle, type NeonDatabase } from "drizzle-orm/neon-serverless";
+import type { ExtractTablesWithRelations } from "drizzle-orm";
+import type { NeonQueryResultHKT } from "drizzle-orm/neon-serverless";
+import type { PgTransaction } from "drizzle-orm/pg-core";
 import ws from "ws";
 import { env } from "@/lib/env";
 
@@ -42,14 +45,24 @@ export type WithTxContext = {
  *     });
  *   }
  */
+/**
+ * Transaction handle type exported so module service files can declare fn signatures.
+ * This matches exactly what Drizzle's `db.transaction((tx) => ...)` passes as `tx`.
+ */
+export type DbTx = PgTransaction<
+  NeonQueryResultHKT,
+  Record<string, unknown>,
+  ExtractTablesWithRelations<Record<string, unknown>>
+>;
+
 export async function withTxInRoute<T>(
   ctx: WithTxContext | undefined,
-  fn: (tx: ReturnType<typeof drizzle>) => Promise<T>,
+  fn: (tx: DbTx) => Promise<T>,
 ): Promise<T> {
   const pool = createPool();
   const db = drizzle(pool);
   try {
-    return await db.transaction(async (tx) => fn(tx as unknown as ReturnType<typeof drizzle>));
+    return await db.transaction(fn);
   } finally {
     if (ctx?.waitUntil) {
       ctx.waitUntil(pool.end());
@@ -63,9 +76,12 @@ export async function withTxInRoute<T>(
  * One-shot read (no transaction). Still uses WebSocket Pool for schema consistency.
  * Prefer this for simple GETs to avoid BEGIN/COMMIT overhead.
  */
+/** Full (non-transactional) Drizzle handle type. */
+export type DbHandle = NeonDatabase<Record<string, unknown>>;
+
 export async function withRead<T>(
   ctx: WithTxContext | undefined,
-  fn: (db: ReturnType<typeof drizzle>) => Promise<T>,
+  fn: (db: DbHandle) => Promise<T>,
 ): Promise<T> {
   const pool = createPool();
   const db = drizzle(pool);

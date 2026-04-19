@@ -1,16 +1,19 @@
-// Placeholder — Phase 1 يستبدلها بـ /login + redirect حسب الدور.
-export default function HomePage() {
-  return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-8">
-      <h1 className="text-3xl font-bold">Vitesse Eco</h1>
-      <p className="mt-4 text-muted-foreground">
-        Phase 0 — الأساس جاهز. Phase 1 تضيف المصادقة والتوجيه حسب الدور.
-      </p>
-      <p className="mt-2 text-sm text-muted-foreground">
-        <a href="/api/health" className="underline">
-          /api/health
-        </a>
-      </p>
-    </main>
-  );
+import { redirect } from "next/navigation";
+import { getSessionClaims } from "@/lib/session-claims";
+
+// Root — middleware already redirects authenticated users to role home (D-72).
+// This page handles the case where middleware passes through (e.g. initial render).
+export default async function RootPage() {
+  const claims = await getSessionClaims();
+  if (!claims) redirect("/login");
+
+  const roleHome: Record<typeof claims.role, string> = {
+    pm: "/action-hub",
+    gm: "/action-hub",
+    manager: "/action-hub",
+    seller: "/orders",
+    driver: "/driver-tasks",
+    stock_keeper: "/preparation",
+  };
+  redirect(roleHome[claims.role]);
 }

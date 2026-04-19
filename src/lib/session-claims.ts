@@ -1,5 +1,9 @@
-// D-67: SessionClaims abstraction — web cookies today، bearer token ready for Android (Phase 5+).
-// كل business route handler يستدعي getSessionClaims(request)، ليس auth() مباشرة.
+import { auth } from "@/auth";
+import { AuthError, PermissionError } from "./api-errors";
+
+// D-67: SessionClaims abstraction.
+// - Today: Auth.js v5 cookie (web).
+// - Phase 5+ (Android): Authorization: Bearer <JWT> branch added here; routes don't change.
 
 export type Role =
   | "pm"
@@ -9,6 +13,15 @@ export type Role =
   | "driver"
   | "stock_keeper";
 
+export const ALL_ROLES: readonly Role[] = [
+  "pm",
+  "gm",
+  "manager",
+  "seller",
+  "driver",
+  "stock_keeper",
+] as const;
+
 export type SessionClaims = {
   userId: number;
   username: string;
@@ -17,36 +30,43 @@ export type SessionClaims = {
 };
 
 /**
- * Extract session claims from request.
- * Phase 0..5 (web-only): Auth.js cookie via auth().
- * Phase 5+ (Android): Authorization: Bearer <JWT> branch.
+ * Extract session claims from a Request.
+ * Returns null when no valid session (caller decides 401 vs 403 vs redirect).
  *
- * Until Phase 1 adds Auth.js, returns null.
+ * @param _request — kept for future mobile bearer-token branch (unused for web cookies).
  */
 export async function getSessionClaims(
-  _request: Request,
+  _request?: Request,
 ): Promise<SessionClaims | null> {
-  // Phase 0 stub — Phase 1 replaces with:
-  //   const session = await auth();
-  //   if (session?.user) return toClaims(session.user);
-  //
-  //   // Phase 5+ mobile branch:
-  //   const bearer = _request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  //   if (bearer) return verifyJwtAndExtractClaims(bearer);
+  const session = await auth();
+  if (!session?.user) return null;
 
-  return null;
+  const u = session.user as {
+    id?: string;
+    username?: string;
+    role?: Role;
+    name?: string | null;
+  };
+  if (!u.id || !u.username || !u.role) return null;
+
+  return {
+    userId: Number(u.id),
+    username: u.username,
+    role: u.role,
+    name: u.name ?? u.username,
+  };
+
+  // Phase 5+ mobile branch (commented until Android client lands):
+  // const bearer = _request?.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  // if (bearer) return verifyJwtAndExtractClaims(bearer);
 }
 
 /**
- * Type-safe claims assertion for route handlers.
- * Throws AuthError if claims missing.
+ * Type-safe claims assertion for route handlers. Throws AuthError if missing.
  */
-export async function requireClaims(request: Request): Promise<SessionClaims> {
+export async function requireClaims(request?: Request): Promise<SessionClaims> {
   const claims = await getSessionClaims(request);
-  if (!claims) {
-    const { AuthError } = await import("./api-errors");
-    throw new AuthError();
-  }
+  if (!claims) throw new AuthError();
   return claims;
 }
 
@@ -54,14 +74,11 @@ export async function requireClaims(request: Request): Promise<SessionClaims> {
  * Require claims AND specific role(s). Throws PermissionError if role mismatch.
  */
 export async function requireRole(
-  request: Request,
+  request: Request | undefined,
   allowed: Role | Role[],
 ): Promise<SessionClaims> {
   const claims = await requireClaims(request);
   const allowedArr = Array.isArray(allowed) ? allowed : [allowed];
-  if (!allowedArr.includes(claims.role)) {
-    const { PermissionError } = await import("./api-errors");
-    throw new PermissionError();
-  }
+  if (!allowedArr.includes(claims.role)) throw new PermissionError();
   return claims;
 }

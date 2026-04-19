@@ -1,0 +1,1 @@
+ALTER TABLE "permissions" ADD CONSTRAINT "permissions_role_resource_action_unique" UNIQUE("role","resource","action");

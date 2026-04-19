@@ -22,13 +22,18 @@ export default defineConfig({
       include: ["src/**/*.{ts,tsx}"],
       exclude: [
         "src/**/*.test.ts",
-        "src/app/**",            // UI — covered by E2E (Phase 1+)
+        "src/app/**",            // UI + route handlers — covered by E2E / integration (Phase 1+)
+        "src/middleware.ts",     // Edge middleware — tested via integration + manual
+        "src/auth.ts",           // Auth.js wiring — covered by integration (login flow) in Phase 1+
+        "src/auth.config.ts",    // Edge-safe config (declarative)
         "src/db/migrations/**",
-        "src/db/schema/**",      // Drizzle table declarations — no runtime logic to unit-test; verified via integration tests (Phase 1+)
-        "src/db/client.ts",      // Requires live Neon branch — covered by integration tests
-        "src/lib/env.ts",        // Requires env var setup — smoke-tested via build + integration
-        "src/modules/**/dto.ts", // Zod schemas — verified implicitly when used in tests
-        "src/modules/**/mappers.ts", // Trivial projections — covered via service-layer tests (Phase 1+)
+        "src/db/schema/**",      // Drizzle declarations — verified via integration
+        "src/db/client.ts",      // Live Neon — integration territory
+        "src/db/seed.ts",        // Declarative seed data
+        "src/components/**",     // UI components — covered by E2E + a11y (Phase 1+ once Playwright lands)
+        "src/lib/env.ts",        // env var setup — smoke via build + integration
+        "src/modules/**/dto.ts", // Zod schemas — implicit coverage
+        "src/modules/**/mappers.ts", // Trivial projections
         "src/types/**",
         "**/*.d.ts",
       ],

@@ -1,4 +1,4 @@
-import { boolean, check, date, integer, numeric, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, check, date, integer, numeric, pgTable, serial, text, timestamp, unique } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { ROLES } from "./enums";
 
@@ -35,13 +35,17 @@ export const userBonusRates = pgTable("user_bonus_rates", {
 });
 
 // Table 31: permissions (DB-driven role matrix — D-12 + D-59)
-export const permissions = pgTable("permissions", {
-  id: serial("id").primaryKey(),
-  role: text("role").notNull(),
-  resource: text("resource").notNull(),
-  action: text("action").notNull(), // view|create|edit|delete|approve|view_all|view_own
-  allowed: boolean("allowed").notNull().default(false),
-});
+export const permissions = pgTable(
+  "permissions",
+  {
+    id: serial("id").primaryKey(),
+    role: text("role").notNull(),
+    resource: text("resource").notNull(),
+    action: text("action").notNull(), // view|create|edit|delete|approve|view_all|view_own|...
+    allowed: boolean("allowed").notNull().default(false),
+  },
+  (t) => [unique("permissions_role_resource_action_unique").on(t.role, t.resource, t.action)],
+);
 
 // Table 29: notification_preferences (in_app only — D-22)
 export const notificationPreferences = pgTable("notification_preferences", {
