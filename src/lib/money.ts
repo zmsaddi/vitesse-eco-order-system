@@ -1,35 +1,54 @@
+// D-02 + BR-50: كل الأرقام المالية NUMERIC(19,2) في DB، TTC، tolerance 0.01€.
+// Drizzle يعيد NUMERIC كـ string → نُحوِّل إلى number + نُدوِّر.
+
+const CENT = 100;
+const TOLERANCE = 0.005; // half-cent — للتعويض عن FP drift
+
 /**
- * Financial precision utilities.
- * All amounts are TTC (decision H1).
- * Precision: 0.01€ (NUMERIC 19,2).
+ * Round to 2 decimal places safely (FP-safe + sign-safe).
+ * Positive and negative halves both round away from zero.
+ * Math.round((1.005 + EPSILON) * 100) / 100 = 1.01
+ * Math.round((-1.005 - EPSILON) * 100) / 100 = -1.01 (sign-preserved via sign-aware bias)
  */
-
-/** Round to 2 decimal places with epsilon correction */
-export function round2(n: number): number {
-  return Math.round((n + Number.EPSILON) * 100) / 100
+export function round2(x: number): number {
+  if (!Number.isFinite(x)) {
+    throw new Error(`money.round2: non-finite ${x}`);
+  }
+  if (x === 0) return 0;
+  const sign = x >= 0 ? 1 : -1;
+  return (sign * Math.round((Math.abs(x) + Number.EPSILON) * CENT)) / CENT;
 }
 
-/** Extract TVA from TTC amount (for invoice display only — H1/M2) */
-export function tvaFromTtc(ttc: number, vatRate: number = 20): number {
-  return round2(ttc * vatRate / (100 + vatRate))
+/**
+ * Parse Drizzle NUMERIC(19,2) string → number. Throws if not a finite number.
+ */
+export function toNumber(dbValue: string | number | null | undefined): number {
+  if (dbValue === null || dbValue === undefined) return 0;
+  const n = typeof dbValue === "number" ? dbValue : parseFloat(dbValue);
+  if (!Number.isFinite(n)) {
+    throw new Error(`money.toNumber: invalid numeric value "${dbValue}"`);
+  }
+  return n;
 }
 
-/** Get HT from TTC amount (for invoice display only) */
-export function htFromTtc(ttc: number, vatRate: number = 20): number {
-  return round2(ttc - tvaFromTtc(ttc, vatRate))
+/**
+ * Convert number → string representation suitable for NUMERIC(19,2) INSERT/UPDATE.
+ */
+export function toDb(n: number): string {
+  if (!Number.isFinite(n)) throw new Error(`money.toDb: non-finite ${n}`);
+  return round2(n).toFixed(2);
 }
 
-/** Convert to cents (integer) for safe arithmetic */
-export function toCents(amount: number): number {
-  return Math.round(amount * 100)
+/**
+ * Compare two money amounts within tolerance (0.01€ per BR-50).
+ */
+export function moneyEquals(a: number, b: number): boolean {
+  return Math.abs(round2(a) - round2(b)) < TOLERANCE;
 }
 
-/** Convert from cents back to euros */
-export function fromCents(cents: number): number {
-  return cents / 100
-}
-
-/** Check if two amounts are equal within tolerance (0.01€) */
-export function amountsEqual(a: number, b: number, tolerance = 0.01): boolean {
-  return Math.abs(a - b) <= tolerance
+/**
+ * Sum array of numbers with round2 protection.
+ */
+export function moneySum(values: number[]): number {
+  return round2(values.reduce((acc, v) => acc + v, 0));
 }

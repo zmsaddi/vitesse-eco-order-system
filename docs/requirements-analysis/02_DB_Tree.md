@@ -1,15 +1,17 @@
-# نموذج البيانات — Database Schema v2
+# نموذج البيانات — Database Schema
 
-> **رقم العنصر**: #02 | **المحور**: أ | **الحالة**: قيد التحديث
-> **قاعدة البيانات**: PostgreSQL (Neon Serverless)
-> **ORM**: Drizzle ORM + @neondatabase/serverless
-> **عدد الجداول**: ~35
-> **الدقة المالية**: NUMERIC(19,2) — كل الأرقام TTC
-> **التواريخ**: DATE / TIMESTAMPTZ (المنطقة: Europe/Paris)
+> **رقم العنصر**: #02 | **المحور**: أ | **الحالة**: مواصفات نهائية
+> **قاعدة البيانات**: PostgreSQL 17+ (Neon Serverless)
+> **ORM**: Drizzle ORM + `@neondatabase/serverless` (WebSocket Pool للكتابات متعددة الجمل)
+> **عدد الجداول**: 36
+> **الدقة المالية**: `NUMERIC(19,2)` — كل الأرقام TTC
+> **التواريخ**: `DATE` / `TIMESTAMPTZ` — المنطقة الزمنية `Europe/Paris`
+>
+> **سياسة الحذف**: كل الجداول المالية والحركية تستخدم soft-delete (`deleted_at TIMESTAMPTZ`) + FK `ON DELETE RESTRICT`. الحذف الفعلي يقتصر على البيانات المساعدة (price_history, notifications, voice_logs) خلف retention policies.
 
 ---
 
-## فهرس الجداول
+## فهرس الجداول (المجموع: 36 جدول)
 
 | # | المجموعة | الجداول |
 |---|---------|---------|
@@ -17,7 +19,7 @@
 | 3-5 | المنتجات والكتالوج | products, product_images, product_commission_rules |
 | 6-7 | الموردين | suppliers, supplier_payments |
 | 8 | العملاء | clients |
-| 9-12 | الطلبات (يحل محل sales) | orders, order_items, gift_pool, payments |
+| 9-12 | الطلبات | orders, order_items, gift_pool, payments |
 | 13-14 | المشتريات | purchases, price_history |
 | 15 | المصاريف | expenses |
 | 16-17 | التوصيل والمهام | deliveries, driver_tasks |
@@ -29,8 +31,12 @@
 | 30 | سجل النشاطات | activity_log |
 | 31 | الصلاحيات | permissions |
 | 32 | الإلغاءات | cancellations |
+| 32b | منع التكرار | **idempotency_keys** (D-16 — جديد) |
 | 33 | الجرد | inventory_counts |
-| 34-36 | النظام الصوتي | voice_logs, ai_corrections, ai_patterns, entity_aliases |
+| 34 | سجل الصوت | voice_logs |
+| 35 | أسماء الكيانات | entity_aliases |
+| 36a | تصحيحات AI | ai_corrections |
+| 36b | أنماط AI | ai_patterns |
 
 ---
 
@@ -40,12 +46,13 @@
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
 | username | TEXT | UNIQUE, NOT NULL |
-| password | TEXT | NOT NULL (bcrypt) |
+| password | TEXT | NOT NULL (Argon2id — D-40؛ bcrypt 14 fallback) |
 | name | TEXT | NOT NULL |
 | role | TEXT | NOT NULL, DEFAULT 'seller' |
 | active | BOOLEAN | DEFAULT true |
 | profit_share_pct | NUMERIC(5,2) | DEFAULT 0 |
 | profit_share_start | DATE | NULL |
+| onboarded_at | TIMESTAMPTZ | NULL (D-49 — أول welcome modal يُعرض حتى يصبح NOT NULL) |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() |
 
 **CHECK**: `role IN ('pm','gm','manager','seller','driver','stock_keeper')`
@@ -58,6 +65,36 @@
 |--------|------|-------------|
 | key | TEXT | PRIMARY KEY |
 | value | TEXT | NOT NULL |
+
+**CHECK (D-28 — مفاتيح مسموحة فقط)**:
+```sql
+CHECK (key IN (
+  -- Shop identity (D-35 — mandatory mentions)
+  'shop_name', 'shop_legal_form', 'shop_siren', 'shop_siret', 'shop_ape',
+  'shop_vat_number', 'shop_address', 'shop_city', 'shop_email', 'shop_website',
+  'shop_iban', 'shop_bic', 'shop_capital_social', 'shop_rcs_city',
+  'shop_rcs_number', 'shop_penalty_rate_annual', 'shop_recovery_fee_eur',
+  -- Invoicing
+  'vat_rate', 'invoice_currency',
+  -- Bonuses / Commissions
+  'seller_bonus_fixed', 'seller_bonus_percentage', 'driver_bonus_fixed',
+  'max_discount_seller_pct', 'max_discount_manager_pct',
+  -- Operational limits
+  'vin_required_categories', 'driver_custody_cap_eur',
+  'sku_limit', 'max_images_per_product',
+  -- Voice system
+  'voice_rate_limit_per_min', 'voice_max_audio_seconds', 'voice_min_audio_ms',
+  -- UX
+  'auto_refresh_interval_ms',
+  -- Retention
+  'activity_log_retention_days', 'voice_logs_retention_days',
+  'read_notifications_retention_days',
+  -- Monitoring (D-42)
+  'neon_hours_used_this_month'
+))
+```
+
+**Typed accessor (D-28)**: `src/lib/settings.ts` يُعرِّف Zod schema `SettingsSchema` + helper `getSettings(): Promise<Settings>` مع cache TTL 60s. لا parseInt/parseFloat يدوي — كل قراءة typed.
 
 ---
 
@@ -92,7 +129,7 @@
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
-| product_id | INTEGER | NOT NULL → FK products.id ON DELETE CASCADE |
+| product_id | INTEGER | NOT NULL → FK products.id ON DELETE RESTRICT (D-27) |
 | url | TEXT | NOT NULL |
 | is_primary | BOOLEAN | DEFAULT false |
 | sort_order | INTEGER | DEFAULT 0 |
@@ -131,10 +168,15 @@
 | phone | TEXT | DEFAULT '' |
 | address | TEXT | DEFAULT '' |
 | notes | TEXT | DEFAULT '' |
+| credit_due_from_supplier | NUMERIC(19,2) | NOT NULL DEFAULT 0 (D-10 + D-62: رصيد دائن من إلغاء شراء مدفوع. rename من `credit_balance`) |
+| active | BOOLEAN | DEFAULT true |
 | updated_by | TEXT | NULL |
 | updated_at | TIMESTAMPTZ | NULL |
+| deleted_at | TIMESTAMPTZ | NULL |
+| deleted_by | TEXT | NULL |
 
-**UNIQUE**: `(name, phone) WHERE phone != ''`
+**UNIQUE (partial)**: `(name, phone) WHERE phone != '' AND deleted_at IS NULL`
+**ملاحظة**: الموردين لا تُحذف — تُعطَّل (`active=false`).
 
 ---
 
@@ -181,30 +223,35 @@
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
-| ref_code | TEXT | NOT NULL |
+| ref_code | TEXT | NOT NULL (ORD-YYYYMMDD-NNNNN) |
 | date | DATE | NOT NULL |
-| client_name | TEXT | NOT NULL |
-| client_phone | TEXT | DEFAULT '' |
+| client_id | INTEGER | NOT NULL → FK clients.id ON DELETE RESTRICT (D-20) |
+| client_name_cached | TEXT | NOT NULL (D-20) |
+| client_phone_cached | TEXT | DEFAULT '' |
+| delivery_address | TEXT | DEFAULT '' (override — يعبَّأ من clients.address افتراضياً، قابل للتعديل للطلب فقط) |
 | status | TEXT | DEFAULT 'محجوز' |
 | payment_method | TEXT | NOT NULL |
 | total_amount | NUMERIC(19,2) | DEFAULT 0 |
 | paid_amount | NUMERIC(19,2) | DEFAULT 0 |
 | remaining | NUMERIC(19,2) | DEFAULT 0 |
 | payment_status | TEXT | DEFAULT 'pending' |
-| down_payment | NUMERIC(19,2) | DEFAULT 0 |
+| down_payment | NUMERIC(19,2) | DEFAULT 0 (dérivé من `payments WHERE type='advance'` — يُحدَّث عبر trigger؛ قيمة snapshot فقط) |
 | cancel_reason | TEXT | NULL |
 | notes | TEXT | DEFAULT '' |
 | created_by | TEXT | NOT NULL |
 | updated_by | TEXT | NULL |
 | updated_at | TIMESTAMPTZ | NULL |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() |
+| deleted_at | TIMESTAMPTZ | NULL (soft-delete — D-04) |
+| deleted_by | TEXT | NULL |
 
-**CHECK**: `status IN ('محجوز','قيد_التحضير','جاهز','مؤكد','ملغي')`
+**CHECK**: `status IN ('محجوز','قيد التحضير','جاهز','مؤكد','ملغي')` (D-03)
 **CHECK**: `payment_method IN ('كاش','بنك','آجل')`
 **CHECK**: `payment_status IN ('pending','partial','paid','cancelled')`
-**UNIQUE**: `ref_code WHERE ref_code != ''`
-**INDEX**: `orders_client_name_idx ON (client_name)`
+**UNIQUE (partial)**: `ref_code WHERE ref_code != '' AND deleted_at IS NULL`
+**INDEX**: `orders_client_id_idx ON (client_id)` (D-20)
 **INDEX**: `orders_payment_status_idx ON (payment_status)`
+**INDEX**: `orders_status_idx ON (status)` (لـ dashboard queries)
 
 ---
 
@@ -213,23 +260,29 @@
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
-| order_id | INTEGER | NOT NULL → FK orders.id ON DELETE CASCADE |
-| product_name | TEXT | NOT NULL |
-| category | TEXT | DEFAULT '' |
-| quantity | NUMERIC(19,2) | NOT NULL |
-| unit_price | NUMERIC(19,2) | NOT NULL |
-| cost_price | NUMERIC(19,2) | DEFAULT 0 |
-| line_total | NUMERIC(19,2) | NOT NULL |
+| order_id | INTEGER | NOT NULL → FK orders.id ON DELETE RESTRICT (D-27) |
+| product_id | INTEGER | NOT NULL → FK products.id ON DELETE RESTRICT (D-20) |
+| product_name_cached | TEXT | NOT NULL (اسم المنتج لحظة الإنشاء — D-20) |
+| category | TEXT | DEFAULT '' (snapshot من products.category وقت الإنشاء) |
+| quantity | NUMERIC(19,2) | NOT NULL CHECK (quantity > 0) |
+| unit_price | NUMERIC(19,2) | NOT NULL (TTC، بعد الخصم) |
+| recommended_price | NUMERIC(19,2) | NOT NULL (snapshot من products.sell_price عند الإنشاء — للعمولة) |
+| cost_price | NUMERIC(19,2) | DEFAULT 0 (snapshot من products.buy_price) |
+| line_total | NUMERIC(19,2) | NOT NULL (= quantity × unit_price للأصناف العادية، = 0 للهدايا) |
 | discount_type | TEXT | NULL |
 | discount_value | NUMERIC(19,2) | DEFAULT 0 |
 | discount_reason | TEXT | DEFAULT '' |
 | is_gift | BOOLEAN | DEFAULT false |
 | gift_approved_by | TEXT | NULL |
-| vin | TEXT | DEFAULT '' |
-| commission_amount | NUMERIC(19,2) | DEFAULT 0 |
+| vin | TEXT | DEFAULT '' (إلزامي إذا category ∈ vin_required_categories) |
+| commission_rule_snapshot | JSONB | NOT NULL DEFAULT '{}' (D-17 — القواعد المُطبَّقة لحظة الإنشاء) |
+| commission_amount | NUMERIC(19,2) | DEFAULT 0 (يُحسب عند تأكيد التسليم) |
+| deleted_at | TIMESTAMPTZ | NULL |
 
 **CHECK**: `discount_type IN ('percent','fixed') OR discount_type IS NULL`
-**INDEX**: `order_items_product_name_idx ON (product_name)`
+**INDEX**: `order_items_product_id_idx ON (product_id)` (D-20)
+**INDEX**: `order_items_order_id_idx ON (order_id)`
+**ملاحظة**: `commission_rule_snapshot` يحتوي: `{ source, seller_fixed_per_unit, seller_pct_overage, driver_fixed_per_delivery, captured_at }` (D-17). يُستخدم عند `calculateBonusInTx` بدلاً من القواعد الحالية.
 
 ---
 
@@ -253,18 +306,23 @@
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
 | date | DATE | NOT NULL |
-| client_name | TEXT | NOT NULL |
-| amount | NUMERIC(19,2) | NOT NULL |
-| order_id | INTEGER | NULL → FK orders.id |
+| client_id | INTEGER | NULL → FK clients.id ON DELETE RESTRICT (D-20) |
+| client_name_cached | TEXT | NOT NULL (D-20) |
+| amount | NUMERIC(19,2) | NOT NULL (موقَّع — refund سالب، D-06) |
+| order_id | INTEGER | NULL → FK orders.id ON DELETE RESTRICT |
 | type | TEXT | DEFAULT 'collection' |
 | payment_method | TEXT | DEFAULT 'كاش' |
 | notes | TEXT | DEFAULT '' |
 | created_by | TEXT | NOT NULL |
 | updated_by | TEXT | NULL |
 | updated_at | TIMESTAMPTZ | NULL |
+| deleted_at | TIMESTAMPTZ | NULL (soft-delete — لا hard delete، D-04) |
+| deleted_by | TEXT | NULL |
 
 **CHECK**: `type IN ('collection','refund','advance')`
 **CHECK**: `payment_method IN ('كاش','بنك')`
+**ملاحظة**: `tva_amount` **محذوف** (D-02) — TVA تُحسب عند render الفاتورة فقط، ليست مخزَّنة.
+**ملاحظة**: `amount` موقَّع — refund = قيمة سالبة (تعكس ديناميكياً cash flow).
 
 ---
 
@@ -275,10 +333,12 @@
 | id | SERIAL | PRIMARY KEY |
 | ref_code | TEXT | DEFAULT '' |
 | date | DATE | NOT NULL |
-| supplier | TEXT | NOT NULL |
-| item | TEXT | NOT NULL |
+| supplier_id | INTEGER | NOT NULL → FK suppliers.id ON DELETE RESTRICT (D-20) |
+| supplier_name_cached | TEXT | NOT NULL (D-20) |
+| product_id | INTEGER | NOT NULL → FK products.id ON DELETE RESTRICT |
+| item_name_cached | TEXT | NOT NULL |
 | category | TEXT | DEFAULT '' |
-| quantity | NUMERIC(19,2) | NOT NULL |
+| quantity | NUMERIC(19,2) | NOT NULL CHECK (quantity > 0) |
 | unit_price | NUMERIC(19,2) | NOT NULL |
 | total | NUMERIC(19,2) | NOT NULL |
 | payment_method | TEXT | DEFAULT 'كاش' |
@@ -288,9 +348,14 @@
 | created_by | TEXT | NOT NULL |
 | updated_by | TEXT | NULL |
 | updated_at | TIMESTAMPTZ | NULL |
+| deleted_at | TIMESTAMPTZ | NULL |
+| deleted_by | TEXT | NULL |
 
-**UNIQUE**: `ref_code WHERE ref_code != ''`
-**INDEX**: `purchases_supplier_idx ON (supplier)`
+**CHECK**: `payment_method IN ('كاش','بنك','آجل')`
+**CHECK**: `payment_status IN ('paid','partial','pending')`
+**UNIQUE (partial)**: `ref_code WHERE ref_code != '' AND deleted_at IS NULL`
+**INDEX**: `purchases_supplier_id_idx ON (supplier_id)` (D-20)
+**INDEX**: `purchases_product_id_idx ON (product_id)`
 
 ---
 
@@ -322,6 +387,7 @@
 | description | TEXT | NOT NULL |
 | amount | NUMERIC(19,2) | NOT NULL |
 | payment_method | TEXT | DEFAULT 'كاش' |
+| comptable_class | TEXT | NULL (D-61 — PCG class e.g. '6037' inventory_loss، '6251' postage، '6064' supplies. يُصدَّر في CSV للـ expert-comptable) |
 | notes | TEXT | DEFAULT '' |
 | created_by | TEXT | NOT NULL |
 | updated_by | TEXT | NULL |
@@ -336,19 +402,27 @@
 | id | SERIAL | PRIMARY KEY |
 | ref_code | TEXT | DEFAULT '' |
 | date | DATE | NOT NULL |
-| order_id | INTEGER | NOT NULL → FK orders.id |
-| client_name | TEXT | NOT NULL |
-| client_phone | TEXT | DEFAULT '' |
+| order_id | INTEGER | NOT NULL → FK orders.id ON DELETE RESTRICT |
+| client_id | INTEGER | NOT NULL → FK clients.id ON DELETE RESTRICT (D-20) |
+| client_name_cached | TEXT | NOT NULL (D-20) |
+| client_phone_cached | TEXT | DEFAULT '' |
 | address | TEXT | DEFAULT '' |
 | status | TEXT | DEFAULT 'قيد الانتظار' |
-| assigned_driver | TEXT | DEFAULT '' |
+| assigned_driver_id | INTEGER | NULL → FK users.id ON DELETE RESTRICT |
+| assigned_driver_username_cached | TEXT | DEFAULT '' |
 | notes | TEXT | DEFAULT '' |
+| confirmation_date | TIMESTAMPTZ | NULL (يُعبَّأ عند status='تم التوصيل') |
 | created_by | TEXT | NOT NULL |
 | updated_by | TEXT | NULL |
 | updated_at | TIMESTAMPTZ | NULL |
+| deleted_at | TIMESTAMPTZ | NULL |
+| deleted_by | TEXT | NULL |
 
-**CHECK**: `status IN ('قيد الانتظار','قيد_التحضير','جاهز','جاري التوصيل','تم التوصيل','ملغي')`
-**UNIQUE**: `ref_code WHERE ref_code != ''`
+**CHECK**: `status IN ('قيد الانتظار','قيد التحضير','جاهز','جاري التوصيل','تم التوصيل','ملغي')` (D-03)
+**UNIQUE (partial)**: `ref_code WHERE ref_code != '' AND deleted_at IS NULL`
+**INDEX**: `deliveries_order_id_idx ON (order_id)`
+**INDEX**: `deliveries_assigned_driver_id_idx ON (assigned_driver_id)`
+**INDEX**: `deliveries_status_idx ON (status)`
 
 ---
 
@@ -358,7 +432,8 @@
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
 | type | TEXT | NOT NULL |
-| assigned_driver | TEXT | NOT NULL |
+| assigned_driver_id | INTEGER | NOT NULL → FK users.id ON DELETE RESTRICT |
+| assigned_driver_username_cached | TEXT | NOT NULL |
 | status | TEXT | DEFAULT 'pending' |
 | related_entity_type | TEXT | NULL |
 | related_entity_id | INTEGER | NULL |
@@ -366,34 +441,70 @@
 | assigned_by | TEXT | NOT NULL |
 | completed_at | TIMESTAMPTZ | NULL |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() |
+| deleted_at | TIMESTAMPTZ | NULL |
 
 **CHECK**: `type IN ('delivery','supplier_pickup','collection')`
 **CHECK**: `status IN ('pending','in_progress','completed','cancelled')`
+**CHECK**: `related_entity_type IN ('order','supplier_purchase','client_collection','other') OR related_entity_type IS NULL` (D-21)
+**INDEX**: `driver_tasks_assigned_driver_id_idx ON (assigned_driver_id)`
+**INDEX**: `driver_tasks_status_idx ON (status)`
 
 ---
 
-## 18. `invoices` — الفواتير
+## 18. `invoices` — الفواتير (D-30 محدَّث: snapshot frozen)
 
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
 | ref_code | TEXT | NOT NULL |
-| date | DATE | NOT NULL |
-| order_id | INTEGER | NOT NULL → FK orders.id |
-| delivery_id | INTEGER | NOT NULL → FK deliveries.id |
-| client_name | TEXT | NOT NULL |
-| client_phone | TEXT | DEFAULT '' |
-| client_email | TEXT | DEFAULT '' |
-| client_address | TEXT | DEFAULT '' |
+| date | DATE | NOT NULL (date de facturation) |
+| delivery_date | DATE | NULL (D-35: date de livraison الإلزامية فرنسياً) |
+| order_id | INTEGER | NOT NULL → FK orders.id ON DELETE RESTRICT |
+| delivery_id | INTEGER | NOT NULL → FK deliveries.id ON DELETE RESTRICT |
+| avoir_of_id | INTEGER | NULL → FK invoices.id ON DELETE RESTRICT (D-38: Avoir reference) |
+| client_name_frozen | TEXT | NOT NULL (snapshot لحظة الإصدار) |
+| client_phone_frozen | TEXT | DEFAULT '' |
+| client_email_frozen | TEXT | DEFAULT '' |
+| client_address_frozen | TEXT | DEFAULT '' |
 | payment_method | TEXT | DEFAULT 'كاش' |
-| seller_name | TEXT | DEFAULT '' |
-| driver_name | TEXT | DEFAULT '' |
+| seller_name_frozen | TEXT | DEFAULT '' |
+| driver_name_frozen | TEXT | DEFAULT '' |
+| total_ttc_frozen | NUMERIC(19,2) | NOT NULL (D-30: لا يتغيَّر بعد الإصدار) |
+| total_ht_frozen | NUMERIC(19,2) | NOT NULL |
+| tva_amount_frozen | NUMERIC(19,2) | NOT NULL |
+| vat_rate_frozen | NUMERIC(5,2) | NOT NULL (vat_rate من settings وقت الإصدار) |
+| prev_hash | TEXT | NULL (D-37: hash chain) |
+| row_hash | TEXT | NOT NULL (D-37) |
 | status | TEXT | DEFAULT 'مؤكد' |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() |
 
-**ملاحظة**: أصناف الفاتورة تُقرأ من order_items عبر order_id — لا تُكرر هنا.
-**ملاحظة**: TVA تُحسب عند توليد PDF فقط — لا تُخزّن. قرار H1.
-**UNIQUE**: `ref_code WHERE ref_code != ''`
+**CHECK (D-38)**: `(avoir_of_id IS NULL) OR (total_ttc_frozen < 0)` — Avoir يحمل total سالب.
+**UNIQUE (partial)**: `ref_code WHERE ref_code != '' AND deleted_at IS NULL`
+**ملاحظة (D-30)**: أصناف الفاتورة محفوظة في جدول منفصل `invoice_lines` (frozen snapshot). لا تُقرأ من `order_items` عند render — قانون anti-fraude 2018 يُلزم inaltérabilité.
+**ملاحظة (D-37)**: `row_hash = SHA256(prev_hash || canonical(row_data))` محسوباً عبر trigger قبل INSERT. تُحدِّد inaltérabilité (loi anti-fraude TVA 2018).
+**مراجع قانونية**: CGI art. 289 + BOI-TVA-DECLA-30-20-10 + loi 2015-1785 art. 88 + CGI art. 286-I-3° bis.
+
+---
+
+## 18b. `invoice_lines` — أصناف الفاتورة المُجمَّدة (D-30 — جديد)
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | SERIAL | PRIMARY KEY |
+| invoice_id | INTEGER | NOT NULL → FK invoices.id ON DELETE RESTRICT |
+| line_number | INTEGER | NOT NULL (1-based) |
+| product_name_frozen | TEXT | NOT NULL |
+| quantity | NUMERIC(19,2) | NOT NULL (موقَّعة للـ Avoir — quantity سالبة) |
+| unit_price_ttc_frozen | NUMERIC(19,2) | NOT NULL |
+| line_total_ttc_frozen | NUMERIC(19,2) | NOT NULL |
+| vat_rate_frozen | NUMERIC(5,2) | NOT NULL |
+| vat_amount_frozen | NUMERIC(19,2) | NOT NULL |
+| ht_amount_frozen | NUMERIC(19,2) | NOT NULL |
+| is_gift | BOOLEAN | DEFAULT false |
+| vin_frozen | TEXT | DEFAULT '' |
+
+**UNIQUE**: `(invoice_id, line_number)`
+**ملاحظة**: immutable — trigger `reject_mutation()` يمنع UPDATE.
 
 ---
 
@@ -413,23 +524,33 @@
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
 | date | DATE | NOT NULL |
-| username | TEXT | NOT NULL |
+| user_id | INTEGER | NOT NULL → FK users.id ON DELETE RESTRICT (D-20) |
+| username_cached | TEXT | NOT NULL (D-20) |
 | role | TEXT | NOT NULL |
-| order_id | INTEGER | NOT NULL → FK orders.id |
-| delivery_id | INTEGER | NOT NULL → FK deliveries.id |
-| item | TEXT | DEFAULT '' |
+| order_id | INTEGER | NOT NULL → FK orders.id ON DELETE RESTRICT |
+| order_item_id | INTEGER | NULL → FK order_items.id ON DELETE RESTRICT (D-29: NULL للـ driver bonus الموحَّد لكل توصيل) |
+| delivery_id | INTEGER | NOT NULL → FK deliveries.id ON DELETE RESTRICT |
+| item | TEXT | DEFAULT '' (name cached) |
 | category | TEXT | DEFAULT '' |
 | quantity | NUMERIC(19,2) | DEFAULT 0 |
-| recommended_price | NUMERIC(19,2) | DEFAULT 0 |
-| actual_price | NUMERIC(19,2) | DEFAULT 0 |
+| recommended_price | NUMERIC(19,2) | DEFAULT 0 (من order_items.recommended_price) |
+| actual_price | NUMERIC(19,2) | DEFAULT 0 (من order_items.unit_price) |
 | fixed_bonus | NUMERIC(19,2) | DEFAULT 0 |
 | extra_bonus | NUMERIC(19,2) | DEFAULT 0 |
 | total_bonus | NUMERIC(19,2) | DEFAULT 0 |
-| settled | BOOLEAN | DEFAULT false |
-| settlement_id | INTEGER | NULL |
+| status | TEXT | DEFAULT 'unsettled' |
+| settlement_id | INTEGER | NULL → FK settlements.id |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() |
+| deleted_at | TIMESTAMPTZ | NULL |
 
-**UNIQUE**: `(delivery_id, role, item)` — عمولة لكل صنف لكل دور لكل توصيل
-**ملاحظة**: order_id = NOT NULL دائماً. قرار M12.
+**CHECK**: `role IN ('seller','driver')`
+**CHECK**: `status IN ('unsettled','settled','retained')`
+**UNIQUE (D-29)**:
+- `(delivery_id, order_item_id, role) WHERE role='seller' AND deleted_at IS NULL` — seller bonus per item
+- `(delivery_id, role) WHERE role='driver' AND deleted_at IS NULL` — عمولة واحدة فقط للسائق لكل توصيل، order_item_id=NULL
+**INDEX**: `bonuses_user_id_idx ON (user_id)` (D-20)
+**INDEX**: `bonuses_status_idx ON (status)`
+**ملاحظة**: `order_id` NOT NULL دائماً (M12). لا تنقلب لـ NULL عند الإلغاء — soft-delete فقط.
 
 ---
 
@@ -437,7 +558,7 @@
 
 | Column | Type | Constraints |
 |--------|------|-------------|
-| username | TEXT | PK → FK users.username ON DELETE CASCADE |
+| username | TEXT | PK → FK users.username ON DELETE RESTRICT (D-27) |
 | seller_fixed | NUMERIC(19,2) | NULL |
 | seller_percentage | NUMERIC(5,2) | NULL |
 | driver_fixed | NUMERIC(19,2) | NULL |
@@ -491,7 +612,7 @@
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
-| group_id | TEXT | NOT NULL → FK profit_distribution_groups.id ON DELETE CASCADE |
+| group_id | TEXT | NOT NULL → FK profit_distribution_groups.id ON DELETE RESTRICT (D-27) |
 | username | TEXT | NOT NULL |
 | base_amount | NUMERIC(19,2) | NOT NULL |
 | percentage | NUMERIC(5,2) | NOT NULL |
@@ -538,7 +659,7 @@
 | reconciled | BOOLEAN | DEFAULT false |
 
 **CHECK**: `type IN ('inflow','outflow','transfer','reconciliation')`
-**CHECK**: `category IN ('sale_collection','supplier_payment','expense','settlement','reward','profit_distribution','driver_handover','manager_settlement','funding','bank_deposit','bank_withdrawal','refund','supplier_credit')`
+**CHECK**: `category IN ('sale_collection','supplier_payment','expense','settlement','reward','profit_distribution','driver_handover','manager_settlement','funding','bank_deposit','bank_withdrawal','refund','reconciliation')` (D-10 — `supplier_credit` محذوف؛ الرصيد الدائن يُدار في `suppliers.credit_due_from_supplier` — rename D-62)
 
 ---
 
@@ -584,7 +705,7 @@
 | channel | TEXT | NOT NULL |
 | enabled | BOOLEAN | DEFAULT true |
 
-**CHECK**: `channel IN ('in_app','email','push')`
+**CHECK**: `channel IN ('in_app')` (D-22 — `email` و `push` محذوفان؛ لا SMTP ولا Web Push في stack الـ MVP. العمود مُحتفَظ به للتوسعة)
 **UNIQUE**: `(user_id, notification_type, channel)`
 
 ---
@@ -603,8 +724,11 @@
 | entity_ref_code | TEXT | NULL |
 | details | JSONB | NULL |
 | ip_address | TEXT | NULL |
+| prev_hash | TEXT | NULL (D-37: hash chain) |
+| row_hash | TEXT | NOT NULL (D-37) |
 
 **CHECK**: `action IN ('create','update','delete','cancel','confirm','collect','login','logout')`
+**IMMUTABLE (D-58)**: trigger `reject_mutation()` يرفض UPDATE. فقط INSERT + SELECT + DELETE-cron-retention.
 
 ---
 
@@ -637,10 +761,39 @@
 | driver_bonus_action | TEXT | NOT NULL |
 | delivery_status_before | TEXT | NULL |
 | notes | TEXT | NULL |
+| prev_hash | TEXT | NULL (D-37: hash chain) |
+| row_hash | TEXT | NOT NULL (D-37) |
 
 **CHECK**: `seller_bonus_action IN ('keep','cancel_as_debt','cancel_unpaid')`
 **CHECK**: `driver_bonus_action IN ('keep','cancel_as_debt','cancel_unpaid')`
+**IMMUTABLE (D-58)**: trigger `reject_mutation()` يرفض UPDATE.
 **ملاحظة**: يعكس شاشة الإلغاء C1 بـ 3 خيارات إلزامية.
+
+---
+
+## 32b. `idempotency_keys` — منع تكرار الـ mutations (D-16 + D-57)
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| key | TEXT | NOT NULL (UUID يُرسَل في header `Idempotency-Key`) |
+| endpoint | TEXT | NOT NULL (e.g. 'POST /api/orders/123/cancel') |
+| username | TEXT | NOT NULL → FK users.username للتدقيق |
+| request_hash | TEXT | NOT NULL (SHA-256 من body — detect key collision مع body مختلف) |
+| response | JSONB | NOT NULL (الرد السابق، يُعاد كما هو عند إعادة الإرسال) |
+| status_code | INTEGER | NOT NULL |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() |
+| expires_at | TIMESTAMPTZ | NOT NULL |
+
+**PRIMARY KEY (D-57)**: `(key, endpoint)` — نفس الـ key جائز عبر endpoints مختلفة.
+**INDEX**: `idempotency_keys_expires_idx ON (expires_at)` (لـ cron cleanup)
+
+**السلوك**:
+- TTL = 24 ساعة.
+- في بداية كل POST mutation حرج (`/api/orders`, `/api/orders/[id]/cancel`, `/api/orders/[id]/collect`, `/api/settlements`, `/api/distributions`, `/api/payments`): الـ middleware يفحص الـ key.
+- إذا موجود + `request_hash` يطابق → يُعاد `response` و `status_code` كما هو. لا re-execution.
+- إذا موجود + `request_hash` مختلف → 409 `IDEMPOTENCY_KEY_CONFLICT`.
+- إذا غير موجود → يُنفَّذ الـ mutation، ثم يُدرَج الصف في نهاية الـ transaction.
+- cleanup عبر `/api/cron/daily`: `DELETE FROM idempotency_keys WHERE expires_at < NOW()`.
 
 ---
 
@@ -674,6 +827,9 @@
 | status | TEXT | DEFAULT 'pending' |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() |
 | debug_json | JSONB | NULL |
+
+**CHECK (D-63)**: `status IN ('pending', 'processed', 'saved', 'abandoned', 'edited_and_saved', 'groq_error')`
+**ملاحظة**: Client يُرسل `PUT /api/voice/cancel` عند إغلاق VoiceConfirm بلا حفظ → `status='abandoned'`.
 
 ---
 
@@ -727,47 +883,178 @@
 
 ---
 
+## 37. `voice_rate_limits` — عدَّاد Voice requests (D-73)
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | SERIAL | PRIMARY KEY |
+| user_id | INTEGER | NOT NULL → FK users.id ON DELETE RESTRICT |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT NOW() |
+
+**INDEX**: `voice_rate_limits_user_time_idx ON (user_id, created_at DESC)` — لـ sliding window query.
+
+**السلوك (D-73)**:
+- `POST /api/v1/voice/process` قبل استدعاء Groq:
+  ```sql
+  SELECT COUNT(*) FROM voice_rate_limits
+   WHERE user_id = :uid AND created_at >= NOW() - INTERVAL '60 seconds';
+  -- إذا >= 10 → 429 VOICE_RATE_LIMIT
+  INSERT INTO voice_rate_limits (user_id) VALUES (:uid);
+  ```
+- Cleanup عبر `/api/cron/hourly`: `DELETE FROM voice_rate_limits WHERE created_at < NOW() - INTERVAL '90 seconds'`.
+
+**ملاحظة (D-73 يُلغي D-33)**: in-memory hybrid كان مُعطَّلاً لأن Vercel stateless — cold-start كل invocation تقريباً = reset النافذة. DB-only يضمن الحماية الفعلية.
+
+---
+
 ## العلاقات (Foreign Keys)
+
+**ملاحظة عامة**: `DELETE` لا يحدث فعلياً على الجداول المالية (D-04). الحذف الناعم (`UPDATE SET deleted_at=NOW()`) فقط. ON DELETE السياسات أدناه تحمي من أي DELETE عرضي.
+
+### FKs على معرِّفات (D-20)
 
 | From | Column | → To | Column | ON DELETE |
 |------|--------|------|--------|-----------|
-| product_images | product_id | products | id | CASCADE |
-| order_items | order_id | orders | id | CASCADE |
+| product_images | product_id | products | id | RESTRICT (D-27 — كان CASCADE، يُحاكى يدوياً في withTx) |
+| order_items | order_id | orders | id | RESTRICT (D-27 — كان CASCADE، يُحاكى يدوياً في withTx) |
+| order_items | product_id | products | id | RESTRICT (D-20) |
 | gift_pool | product_id | products | id | RESTRICT |
-| payments | order_id | orders | id | SET NULL |
+| orders | client_id | clients | id | RESTRICT (D-20) |
+| payments | client_id | clients | id | RESTRICT (D-20) |
+| payments | order_id | orders | id | RESTRICT |
 | supplier_payments | purchase_id | purchases | id | RESTRICT |
+| purchases | supplier_id | suppliers | id | RESTRICT (D-20) |
+| purchases | product_id | products | id | RESTRICT |
 | deliveries | order_id | orders | id | RESTRICT |
+| deliveries | client_id | clients | id | RESTRICT (D-20) |
+| deliveries | assigned_driver_id | users | id | RESTRICT |
+| driver_tasks | assigned_driver_id | users | id | RESTRICT |
 | invoices | order_id | orders | id | RESTRICT |
 | invoices | delivery_id | deliveries | id | RESTRICT |
+| bonuses | user_id | users | id | RESTRICT (D-20) |
 | bonuses | order_id | orders | id | RESTRICT |
+| bonuses | order_item_id | order_items | id | RESTRICT |
 | bonuses | delivery_id | deliveries | id | RESTRICT |
-| user_bonus_rates | username | users | username | CASCADE |
-| profit_distributions | group_id | profit_distribution_groups | id | CASCADE |
+| bonuses | settlement_id | settlements | id | RESTRICT |
+| user_bonus_rates | user_id | users | id | RESTRICT (D-27 — كان CASCADE) |
+| profit_distributions | group_id | profit_distribution_groups | id | RESTRICT (D-27 — كان CASCADE) |
+| profit_distributions | user_id | users | id | RESTRICT (D-20) |
 | cancellations | order_id | orders | id | RESTRICT |
+| cancellations | cancelled_by_id | users | id | RESTRICT (D-20) |
 | inventory_counts | product_id | products | id | RESTRICT |
-| notifications | user_id | users | id | CASCADE |
-| notification_preferences | user_id | users | id | CASCADE |
+| notifications | user_id | users | id | RESTRICT (D-27 — كان CASCADE) |
+| notification_preferences | user_id | users | id | RESTRICT (D-27 — كان CASCADE) |
+| treasury_accounts | owner_user_id | users | id | RESTRICT |
 | treasury_accounts | parent_account_id | treasury_accounts | id | SET NULL |
 | treasury_movements | from_account_id | treasury_accounts | id | RESTRICT |
 | treasury_movements | to_account_id | treasury_accounts | id | RESTRICT |
-| payment_schedule | order_id | orders | id | CASCADE |
+| payment_schedule | order_id | orders | id | RESTRICT |
+| idempotency_keys | — | — | — | — (no FKs — standalone) |
+| price_history | product_id | products | id | RESTRICT (D-20) |
+| price_history | purchase_id | purchases | id | RESTRICT |
 
-**ملاحظة**: ON DELETE = RESTRICT بدل CASCADE لمعظم العلاقات لأن الحذف ناعم دائماً (قرار H5).
+**سياسة CASCADE مُلغاة (D-27 — Phase 0c)**: **كل FK = RESTRICT**. CASCADE كان فخّاً لأنه لا يُطلَق على UPDATE (soft-delete)، ويعرِّض البيانات المالية لـ DELETE عرضي. الـ cascade يُحاكى يدوياً في `withTx`:
 
-### مراجع نصية (بدون FK — تُحدّث ذرياً عند تغيير الاسم)
+```ts
+// مثال: soft-delete order
+await withTx(async (tx) => {
+  await tx.update(orders).set({ deletedAt: now() }).where(eq(orders.id, orderId));
+  await tx.update(orderItems).set({ deletedAt: now() }).where(eq(orderItems.orderId, orderId));
+  await tx.update(deliveries).set({ deletedAt: now() }).where(eq(deliveries.orderId, orderId));
+  // ...
+});
+```
 
-| From | Column | → To | Column |
-|------|--------|------|--------|
-| orders | client_name | clients | name |
-| purchases | supplier | suppliers | name |
-| order_items | product_name | products | name |
-| deliveries | client_name | clients | name |
-| deliveries | assigned_driver | users | username |
-| bonuses | username | users | username |
-| settlements | username | users | username |
-| price_history | product_name | products | name |
+الجداول المُعدَّلة من CASCADE إلى RESTRICT: `order_items.order_id`، `product_images.product_id`، `notifications.user_id`، `user_bonus_rates.username`، `profit_distributions.group_id`.
 
-**ملاحظة**: عند تغيير اسم كيان → تحديث شامل ذري لكل المراجع (قرار H4).
+---
+
+## Soft-Delete Columns
+
+كل جدول مالي أو حركي يحمل هذه الأعمدة:
+
+```
+deleted_at    TIMESTAMPTZ NULL
+deleted_by    TEXT NULL
+deleted_reason TEXT NULL
+```
+
+الجداول المعنية: `orders`, `order_items`, `deliveries`, `driver_tasks`, `invoices`, `bonuses`, `settlements`, `profit_distributions`, `profit_distribution_groups`, `payments`, `supplier_payments`, `purchases`, `expenses`, `treasury_accounts`, `treasury_movements`, `inventory_counts`, `cancellations`, `clients`, `suppliers`, `products`, `users`, `permissions`.
+
+### Views فعّالة (الاستعلامات الافتراضية)
+
+```sql
+CREATE VIEW active_orders AS SELECT * FROM orders WHERE deleted_at IS NULL;
+CREATE VIEW active_deliveries AS SELECT * FROM deliveries WHERE deleted_at IS NULL;
+-- ... لكل جدول يحتاج views افتراضية
+```
+
+الاستعلامات في الكود تمر عبر `active_*` views افتراضياً. استعلامات التدقيق/التاريخ تقرأ الجداول الخام.
+
+---
+
+## Drizzle Setup
+
+### Driver: WebSocket Pool للكتابات
+
+```ts
+// src/db/client.ts
+import { drizzle } from 'drizzle-orm/neon-serverless';
+import { Pool } from '@neondatabase/serverless';
+import ws from 'ws';
+import { neonConfig } from '@neondatabase/serverless';
+
+neonConfig.webSocketConstructor = ws;  // Node.js env
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+export const db = drizzle(pool);
+
+export async function withTx<T>(fn: (tx) => Promise<T>): Promise<T> {
+  return db.transaction(fn);
+}
+```
+
+### HTTP Driver للقراءات (اختياري، للأداء)
+
+```ts
+// src/db/client-read.ts
+import { drizzle } from 'drizzle-orm/neon-http';
+import { neon } from '@neondatabase/serverless';
+const sql = neon(process.env.DATABASE_URL!);
+export const dbRead = drizzle(sql);
+```
+
+### Migrations
+
+```bash
+npx drizzle-kit generate   # توليد SQL من schema TypeScript
+npx drizzle-kit migrate    # تطبيق على قاعدة البيانات
+```
+
+ملفات migrations في `src/db/migrations/` مُلتزمة في الـ repo.
+
+### أسماء مخبَّأة (cached denormalized — D-20)
+
+**أسلوب v2 مُحدَّث**: كل الأعمدة السابقة التي كانت تخزِّن اسم كيان نصياً (مثل `orders.client_name`) استُبدلت بـ `*_id FK` + `*_name_cached TEXT`:
+
+| From | FK column | Cached name |
+|------|-----------|-------------|
+| orders | client_id | client_name_cached, client_phone_cached |
+| order_items | product_id | product_name_cached |
+| deliveries | client_id + assigned_driver_id | client_name_cached, assigned_driver_username_cached |
+| purchases | supplier_id + product_id | supplier_name_cached, item_name_cached |
+| bonuses | user_id | username_cached |
+| payments | client_id | client_name_cached |
+| driver_tasks | assigned_driver_id | assigned_driver_username_cached |
+| price_history | product_id | product_name_cached |
+| invoices | order_id + delivery_id (JOIN للاسم) | — |
+| cancellations | cancelled_by_id | cancelled_by_username_cached |
+
+**سلوك عند إعادة تسمية الكيان الأصلي** (D-20):
+- **لا تحديث** للـ `*_name_cached` في الجداول التابعة. السجل التاريخي يعرض الاسم وقت إنشائه (صحيح محاسبياً).
+- الـ dashboards الحية تعرض الاسم الحالي عبر `JOIN ON *_id` عند العرض.
+- استعلامات البحث تستخدم الاسم الحالي عبر JOIN، مع fallback على `*_name_cached` إذا الكيان الأصلي معطَّل (`active=false`).
+
+**نتيجة**: لا حاجة لتحديث ذري متعدد الجداول (القاعدة القديمة H4 ألغيت فعلياً — الأسماء مخبَّأة بقصد).
 
 ---
 
@@ -782,20 +1069,48 @@
 | shop_siren | 100 732 247 |
 | shop_siret | 100 732 247 00018 |
 | shop_ape | 46.90Z |
+| shop_vat_number | FR43100732247 |
 | shop_address | 32 Rue du Faubourg du Pont Neuf |
 | shop_city | 86000 Poitiers, France |
 | shop_email | contact@vitesse-eco.fr |
+| shop_website | www.vitesse-eco.fr |
+| shop_iban | _(placeholder — reject invoice generation until filled)_ |
+| shop_bic | _(placeholder — reject invoice generation until filled)_ |
+| shop_capital_social | _(placeholder — D-35 إلزامي للـ SAS)_ |
+| shop_rcs_city | Poitiers |
+| shop_rcs_number | _(placeholder — e.g. "100 732 247")_ |
+| shop_penalty_rate_annual | 10.5 |
+| shop_recovery_fee_eur | 40 |
 | vat_rate | 20 |
 | invoice_currency | EUR |
 | seller_bonus_fixed | 10 |
-| seller_bonus_percentage | 50 |
-| driver_bonus_fixed | 5 |
+| seller_bonus_percentage | 40 |
+| driver_bonus_fixed | 10 |
+| max_discount_seller_pct | 5 |
+| max_discount_manager_pct | 15 |
+| vin_required_categories | ["دراجات كهربائية","دراجات عادية"] |
+| driver_custody_cap_eur | 2000 |
+| activity_log_retention_days | 90 |
+| voice_logs_retention_days | 30 |
+| read_notifications_retention_days | 60 |
+| voice_rate_limit_per_min | 10 |
+| voice_max_audio_seconds | 30 |
+| voice_min_audio_ms | 1500 |
+| auto_refresh_interval_ms | 90000 |
+| sku_limit | 500 (D-25) |
+| max_images_per_product | 3 (D-25) |
+| neon_hours_used_this_month | 0 (D-42) |
+
+**ملاحظة**: مفتاح `invoice_mode` **محذوف** (D-09) — قالب الفاتورة ثابت، وسلوك إلغاء الفاتورة (soft) قاعدة تجارية لا مفتاح.
+**ملاحظة (D-28)**: كل المفاتيح الـ enum موثَّقة أعلاه + في CHECK constraint على `settings.key`. Settings غير موجود في القائمة = خطأ migration.
+**ملاحظة (D-35)**: `shop_capital_social`, `shop_rcs_number`, `shop_penalty_rate_annual`, `shop_recovery_fee_eur` **placeholders** — تمنع توليد أول فاتورة حتى تُعبَّأ (إلزام فرنسي).
 
 ### المستخدم الافتراضي
 
 | Field | Value |
 |-------|-------|
 | username | admin |
+| password | **عشوائي 24 حرف** — يُولَّد ويُطبع مرة واحدة في stdout عند `/api/init` (D-24). لا `admin123`. |
 | name | مدير المشروع |
 | role | pm |
 

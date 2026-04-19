@@ -1,6 +1,6 @@
 # قاموس المصطلحات — Glossary (AR / EN)
 
-> **رقم العنصر**: #05 | **المحور**: أ | **الحالة**: قيد التحديث
+> **رقم العنصر**: #05 | **المحور**: أ | **الحالة**: مواصفات نهائية
 
 ---
 
@@ -95,11 +95,27 @@
 
 | المصطلح | المعنى |
 |---------|--------|
-| SSE | Server-Sent Events — بث إشعارات فوري |
+| ~~SSE~~ | ~~Server-Sent Events~~ — **محذوف من v2** (D-41). Polling فقط لأن Neon HTTP لا يدعم LISTEN/NOTIFY. |
 | ORM | Object-Relational Mapping — Drizzle |
-| JWT | JSON Web Token — للمصادقة |
+| JWT | JSON Web Token — للمصادقة (Auth.js v5) |
 | FK | Foreign Key — مفتاح أجنبي |
 | CRUD | Create, Read, Update, Delete |
 | RTL | Right-to-Left — اتجاه الكتابة العربية |
-| withTx | Transaction wrapper — BEGIN/COMMIT/ROLLBACK |
+| withTx | Transaction wrapper — drizzle-orm/neon-serverless `transaction()` |
 | FOR UPDATE | قفل على مستوى الصف لمنع التعارض |
+| pg_advisory_xact_lock | قفل ذري لمدة transaction (مستخدم في profit distribution cap) |
+
+## المصطلحات الصوتية
+
+| المصطلح | المعنى |
+|---------|--------|
+| Whisper | Groq STT model — تحويل صوت إلى نص عربي |
+| Llama 3.1 8B Instant | Groq NLP model — استخراج JSON من النص العربي |
+| entity_aliases | الأسماء البديلة (English + Arabic transliterations) |
+| ai_corrections | تصحيحات المستخدم بعد عرض output الـ AI |
+| ai_patterns | أنماط تعزيز متكررة (frequency-based) |
+| normalizeArabicText | pipeline 4-phase لتوحيد الأرقام والحروف العربية |
+| normalizeForMatching | توحيد عميق (Alif variants, Taa Marbuta, Hamza, eastern digits) لـ fuzzy match |
+| Fuse.js | مكتبة fuzzy search — threshold 0.45 |
+| Jaro-Winkler | خوارزمية تشابه السلاسل — threshold 0.7 |
+| Arabic-safe boundary | بديل `\b` لأن JavaScript `\b` يفشل على العربية (BUG-01) |

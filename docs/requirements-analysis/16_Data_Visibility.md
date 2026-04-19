@@ -1,6 +1,15 @@
 # قواعد رؤية البيانات — Data Visibility Rules
 
-> **رقم العنصر**: #16 | **المحور**: ج | **الحالة**: قيد التحديث
+> **رقم العنصر**: #16 | **المحور**: ج | **الحالة**: مواصفات نهائية
+
+**ملاحظات D-11 + D-12 + Report 1 H8/H9**:
+- Seller يرى عملاءه الخاصين فقط (عبر `orders.created_by = session.user`). لا يرى قائمة العملاء الكاملة.
+- Manager يرى `cost_price` **في سياق تقارير P&L فقط** (scope='reports')، لا في list view المنتجات.
+- GM = PM في كل الرؤية ما عدا `/permissions` (مُعدَّل، حتى القراءة مقيَّدة على 👁).
+
+**PII masking في activity_log** (Report 1 H4 → 17_Security):
+- email, phone, address → مخفية (***) لغير PM/GM.
+- IBAN/BIC → PM/GM only.
 
 ---
 

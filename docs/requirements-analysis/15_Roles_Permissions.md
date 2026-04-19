@@ -1,6 +1,8 @@
 # الأدوار والصلاحيات — Roles & Permissions
 
-> **رقم العنصر**: #15 | **المحور**: ج | **الحالة**: قيد التحديث
+> **رقم العنصر**: #15 | **المحور**: ج | **الحالة**: مواصفات نهائية
+>
+> **تطبيق**: صلاحيات v2 مدفوعة من قاعدة البيانات (جدول `permissions`) — ليست hardcoded في الكود. يُطبَّق عبر helper واحد `can(user, resource, action)` على كل route وعلى كل عنصر UI. انظر أسفل هذا الملف للتفاصيل.
 
 ---
 
@@ -44,7 +46,7 @@ Manager ── عمليات يومية + صندوق فرعي
 | إنشاء | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
 | تعديل محجوز | ✅ | ✅ | ✅ | ✅ (خاصتي) | ❌ | ❌ |
 | تعديل مؤكد | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| إلغاء | ✅ | ✅ | ✅ (محجوز) | ✅ (خاصتي المحجوزة) | ❌ | ❌ |
+| إلغاء | ✅ | ✅ | ✅ (محجوز + قيد التحضير + جاهز — D-11) | ✅ (خاصتي المحجوزة) | ❌ | ❌ |
 | إضافة هدية | ✅ | ✅ | ✅ | ✅ (من gift_pool) | ❌ | ❌ |
 | تطبيق خصم | ✅ (بلا حد) | ✅ (بلا حد) | ✅ (حسب الحد) | ✅ (حسب الحد) | ❌ | ❌ |
 
@@ -104,7 +106,7 @@ Manager ── عمليات يومية + صندوق فرعي
 
 | العملية | PM | GM | Manager | Seller | Driver | Stock Keeper |
 |---------|:--:|:--:|:-------:|:------:|:------:|:------------:|
-| عرض العملاء | ✅ | ✅ | ✅ | 👁 | ❌ | ❌ |
+| عرض العملاء | ✅ | ✅ | ✅ | 👁 (خاصتي فقط — orders.created_by = session.user) | ❌ | ❌ |
 | إنشاء عميل | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
 | تعديل عميل | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | تفاصيل عميل | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
@@ -134,14 +136,22 @@ Manager ── عمليات يومية + صندوق فرعي
 
 | العملية | PM | GM | Manager | Seller | Driver | Stock Keeper |
 |---------|:--:|:--:|:-------:|:------:|:------:|:------------:|
+| Dashboard (عرض) | ✅ | ✅ | ✅ | ✅ (خاصتي) | ✅ (خاصتي) | ✅ (خاصتي) |
 | المستخدمين | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | الإعدادات | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | نسخ احتياطي | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| الصلاحيات | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| الصلاحيات (عرض) | ✅ | 👁 | ❌ | ❌ | ❌ | ❌ |
+| الصلاحيات (تعديل) | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | سجل النشاطات (الكل) | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| سجل النشاطات (محدود) | — | — | 👁 | ❌ | ❌ | ❌ |
+| سجل النشاطات (محدود — فريقي) | — | — | 👁 | ❌ | ❌ | ❌ |
 | الجرد | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ |
 | الإشعارات | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| تفضيلات الإشعارات (خاصتي) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `preparation_queue:view` | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ (Stock Keeper — قائمة مقيَّدة بطلبات قيد التحضير) |
+
+**ملاحظة D-12**: PM هو الوحيد الذي يعدِّل مصفوفة الصلاحيات في `/permissions`. GM يرى المصفوفة (`👁`) لكن لا يعدِّل. يمنع سيناريو GM يرفَّع نفسه.
+
+**ملاحظة D-11**: Manager يُلغي طلبات في الحالات `محجوز + قيد التحضير + جاهز`. لا يُلغي `مؤكد`.
 
 ---
 
@@ -169,4 +179,115 @@ Manager ── عمليات يومية + صندوق فرعي
 | Driver | ❌ | ✅ | يكسب على توصيلاته |
 | Stock Keeper | ❌ | ❌ | لا عمولات |
 
-**العمولة تُحسب بمعدل لحظة التسليم** (M14).
+**العمولة تُحسب بمعدلات snapshot** من `order_items.commission_rule_snapshot JSONB` المُلتقَط لحظة **إنشاء** الـ order_item (قرار D-17 يلغي M14). تغيير القواعد بعد الإنشاء لا يُعدِّل الطلبات السابقة.
+
+---
+
+## آلية التطبيق التقنية
+
+### جدول `permissions`
+
+```sql
+CREATE TABLE permissions (
+  id SERIAL PRIMARY KEY,
+  role TEXT NOT NULL,        -- pm|gm|manager|seller|driver|stock_keeper
+  resource TEXT NOT NULL,    -- orders|products|clients|treasury|...
+  action TEXT NOT NULL,      -- view|create|edit|delete|approve|view_all|view_own
+  allowed BOOLEAN DEFAULT false,
+  UNIQUE (role, resource, action)
+);
+```
+
+### Architecture (D-59 — Middleware JWT-only)
+
+طبقتان منفصلتان للصلاحيات:
+
+1. **Middleware (`src/middleware.ts`)** — يقرأ role من JWT **فقط** (بلا DB calls). يحمي routes **coarse-grained** (e.g. منع seller من `/settings`). سريع (<10ms per request).
+
+2. **API routes (`can()` helper)** — صلاحيات granular داخل كل route (e.g. `can(role, 'orders', 'edit_price_below_cost')`). يستعلم DB مع cache 60s.
+
+**السبب**: middleware داخل Neon HTTP driver مع WebSocket Pool = تأخير 100-200ms لكل request. JWT-only = 0 DB call، سريع + موثوق.
+
+### Helper `can()`
+
+```ts
+// src/lib/can.ts
+import { db } from '@/db/client';
+import { permissions } from '@/db/schema/permissions';
+import { and, eq } from 'drizzle-orm';
+
+const cache = new Map<string, { allowed: boolean; expiresAt: number }>();
+const TTL = 60_000;
+
+export async function can(role: string, resource: string, action: string): Promise<boolean> {
+  const key = `${role}:${resource}:${action}`;
+  const cached = cache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.allowed;
+
+  const [row] = await db.select().from(permissions)
+    .where(and(eq(permissions.role, role), eq(permissions.resource, resource), eq(permissions.action, action)))
+    .limit(1);
+  const allowed = row?.allowed ?? false;
+  cache.set(key, { allowed, expiresAt: Date.now() + TTL });
+  return allowed;
+}
+
+export function invalidatePermissionsCache() {
+  cache.clear();
+}
+```
+
+- Cache محلّي لكل instance (60s TTL).
+- Invalidation يدوي عند POST/PUT على `/api/permissions`.
+- الـ cold-start لا يُفوِّت سجل — الـ cache يُعاد بناؤه طبيعياً.
+
+### الاستخدام في الـ API
+
+```ts
+// مثال: /api/orders POST
+import { requireAuth } from '@/lib/api-auth';
+import { can } from '@/lib/can';
+
+export async function POST(request: Request) {
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
+
+  if (!(await can(auth.session.user.role, 'orders', 'create'))) {
+    return apiError(new PermissionError(), 'غير مصرح', 403);
+  }
+  // ...
+}
+```
+
+### الاستخدام في الـ Sidebar
+
+```tsx
+// src/components/layout/sidebar.tsx
+import { can } from '@/lib/can';
+import { auth } from '@/auth';
+
+export default async function Sidebar() {
+  const session = await auth();
+  const role = session?.user?.role;
+
+  const visibleItems = await Promise.all(
+    NAV_ITEMS.map(async (item) => ({
+      ...item,
+      visible: await can(role, item.resource, 'view'),
+    }))
+  );
+
+  return <nav>{visibleItems.filter(i => i.visible).map(...)}</nav>;
+}
+```
+
+### صفحة إدارة الصلاحيات `/permissions`
+
+- مُتاحة لـ `pm` فقط.
+- مصفوفة UI تفاعلية: 6 أدوار × ~15 resource × ~5 actions.
+- كل toggle → POST `/api/permissions` → تحديث DB + `invalidatePermissionsCache()`.
+- يُستخدم للتعديلات بعد التشغيل الأولي. الافتراضي مأخوذ من seed في Phase 1.
+
+### Default seed
+
+عند `/api/init` أول مرة، يُدرج الصف الافتراضي لكل (role × resource × action) مطابقاً للجداول أعلاه.

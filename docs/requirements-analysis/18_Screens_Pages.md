@@ -1,6 +1,6 @@
 # الشاشات والصفحات — Screens & Pages
 
-> **رقم العنصر**: #18 | **المحور**: د | **الحالة**: قيد التحديث
+> **رقم العنصر**: #18 | **المحور**: د | **الحالة**: مواصفات نهائية
 
 ---
 
@@ -26,7 +26,7 @@
 | 5 | المصاريف | `/expenses` | CRUD | 3 |
 | 6 | التوصيلات | `/deliveries` | CRUD | 4 |
 | 7 | مهام السائق | `/driver-tasks` | Tasks | 4 |
-| 8 | تحضير الطلبات | `/preparation` | Tasks | 4 |
+| 8 | تحضير الطلبات (Stock Keeper) | `/preparation` | Tasks | 4 |
 | 9 | الفواتير | `/invoices` | CRUD | 5 |
 | 10 | الصندوق | `/treasury` | CRUD+Detail | 5 |
 | 11 | التسويات | `/settlements` | CRUD | 5 |
@@ -47,6 +47,29 @@
 
 تفاصيل الأدوار لكل صفحة في ملف `15_Roles_Permissions.md`.
 
+### Onboarding Modal (D-49 — جديد)
+
+ليس صفحة مستقلة — هو modal overlay يظهر على `/dashboard` عند أول تسجيل دخول:
+
+```ts
+// في src/app/dashboard/page.tsx
+if (user.onboarded_at === null) {
+  return <WelcomeModal role={user.role} onComplete={markOnboarded} />;
+}
+```
+
+**محتوى role-specific**:
+- **seller**: checklist (3 مهام): 1) إنشاء أول طلب، 2) تجربة الإدخال الصوتي، 3) عرض عمولتك في `/bonuses`.
+- **driver**: checklist (3): 1) عرض مهامك `/tasks`، 2) تجربة "تحصيل دفعة"، 3) فهم سقف العهدة.
+- **stock_keeper**: (3): 1) أمر تحضير من `/preparation`، 2) إدخال جرد، 3) تنبيه المخزون المنخفض.
+- **manager**: (4): 1) تسوية يومية `/treasury/reconciliation`، 2) مراجعة طلبات فريقك، 3) تسوية عمولات، 4) عرض سجل نشاط الفريق.
+- **gm**: (5): 1) تعبئة settings (SIRET/RCS/Capital — D-35)، 2) إنشاء صندوق رئيسي، 3) تمويل mangers، 4) توزيع أرباح أول دورة، 5) مراجعة attestation éditeur.
+- **pm**: (6): كل ما في gm + إدارة `/permissions` + دعوة users.
+
+**Tooltips سياقية**: dismissible، تُحفَظ في `localStorage[user_id + 'dismissed_tooltips']`.
+
+**زر "إكمال الـ onboarding"** → `PUT /api/users/me/onboard` → `UPDATE users SET onboarded_at=NOW()` → إخفاء الـ modal + checklist collapsible في `/dashboard`.
+
 ---
 
 ## مكونات كل صفحة
@@ -54,7 +77,7 @@
 | الصفحة | نموذج | جدول | فلاتر | بطاقات | نوافذ | تصدير |
 |--------|:-----:|:----:|:-----:|:------:|:-----:|:-----:|
 | الطلبات | ✅ متعدد الأصناف | ✅ | ✅ | ❌ | تفاصيل، إلغاء C1، هدية | CSV |
-| المشتريات | ✅ | ✅ | ✅ | ✅ 3 | تفاصيل، دفع مورد، حذف C5 | CSV |
+| المشتريات | ✅ | ✅ | ✅ | ✅ 3 | تفاصيل، دفع مورد، **عكس C5** (refund/credit — D-10) | CSV |
 | المصاريف | ✅ | ✅ | ✅ | ✅ 1 | تفاصيل | CSV |
 | التوصيلات | ✅ | ✅ | ✅ | ❌ | VIN، إلغاء | CSV |
 | مهام السائق | ❌ | بطاقات | ✅ حالة | ✅ 3 | تأكيد | ❌ |

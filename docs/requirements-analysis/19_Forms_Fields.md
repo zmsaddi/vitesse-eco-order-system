@@ -1,6 +1,6 @@
 # النماذج والحقول — Forms & Fields
 
-> **رقم العنصر**: #19 | **المحور**: د | **الحالة**: قيد التحديث
+> **رقم العنصر**: #19 | **المحور**: د | **الحالة**: مواصفات نهائية
 
 ---
 
@@ -11,7 +11,16 @@
 **أصناف** (إضافة/حذف صفوف): المنتج (SmartSelect)، الكمية، سعر الوحدة، خصم (نوع+قيمة+سبب)، هدية (checkbox من gift_pool)، الإجمالي (محسوب).
 
 ## نموذج إلغاء الطلب (C1)
-3 خيارات إلزامية بدون افتراضي: إعادة للمخزون؟ / إلغاء عمولة بائع؟ / إلغاء عمولة سائق؟ + سبب إلزامي.
+
+**حقول إلزامية** (بدون افتراضي قابل للحفظ مباشرة):
+
+1. **`reason`** (text، min 3 characters) — سبب الإلغاء.
+2. **`return_to_stock`** (radio): `نعم` | `لا`.
+3. **`seller_bonus_action`** (radio): `إبقاء` (keep) | `إلغاء غير مصروفة` (cancel_unpaid) | `إلغاء كدين` (cancel_as_debt). الأخير يظهر فقط عند `bonus.settled=true`.
+4. **`driver_bonus_action`** (radio): نفس الخيارات.
+5. **`notes`** (text، اختياري).
+
+**معاينة قبل الإرسال**: تعرض `refund_amount` وحالة العمولات. الـ Confirm button معطَّل حتى اختيار كل الحقول الإلزامية.
 
 ## نموذج المشتريات
 المورد (SmartSelect)، المنتج، الفئة، الكمية، السعر، طريقة الدفع، الدفعة، ملاحظات.
@@ -36,3 +45,27 @@
 
 ## نموذج المنتج
 الاسم، الفئة، الوصف العربي، الوصف التفصيلي، المواصفات (JSONB)، سعر البيع، حد التنبيه، ظاهر بالكتالوج.
+
+## نموذج VoiceConfirm (D-47 + D-31)
+
+عند تأكيد الاستخراج الصوتي (انظر `32_Voice_System.md`):
+
+**حقل `item` = SmartSelect** (ليس Input نصي):
+- مُحفَّز بالقيمة المستخرجة من LLM (قد تكون حرفياً لاتينياً).
+- يُظهر اقتراحات catalog عبر entity resolver: `name_en` + `name_ar` لكل مُنتج.
+- زر **"+ منتج جديد"** في نهاية القائمة → يفتح `CreateProductDialog` inline بدل الاضطرار لإلغاء الـ VoiceConfirm.
+- **السبب (D-47)**: قاعدة "item بالإنجليزية" في LLM prompt (D-31) تربك seller arabophone إذا Groq أخطأ transliteration.
+
+**حقل `client_name`** في sale: SmartSelect مع fallback "عميل جديد" (نفس المبدأ).
+
+**حقل `supplier`** في purchase: SmartSelect — لا يسمح "مورد جديد" inline (قيود سياسة).
+
+**حقل الكمية `quantity`**: Number input مع فاصلة عشرية (NUMERIC(19,2)).
+
+**حقل السعر `unit_price`**: Number input + TTC label. عرض `عمولتي المتوقعة` للـ seller (D-52) محسوب فوراً.
+
+**حقل `payment_type`**: radio buttons (كاش / بنك / آجل).
+
+**Commission preview (D-52) — لـ role=seller فقط**:
+- عمود إضافي في `items[]` rows: "عمولتي المتوقعة" — محسوبة من `commission_rule_snapshot` فوراً عند إدخال quantity + unit_price.
+- Footer: `إجمالي عمولتي المتوقعة` لكل الـ items مجمَّعة.

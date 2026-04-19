@@ -1,6 +1,6 @@
 # البحث والفلترة — Search & Filtering
 
-> **رقم العنصر**: #21 | **المحور**: د | **الحالة**: قيد التحديث
+> **رقم العنصر**: #21 | **المحور**: د | **الحالة**: مواصفات نهائية
 
 ---
 
@@ -35,3 +35,15 @@
 ## ترتيب الجداول
 
 نقر على عنوان العمود → ترتيب تصاعدي/تنازلي. سهم ▲▼ يظهر.
+
+## Pagination default (Report 1 M9)
+
+كل list endpoint يُطبِّق pagination:
+
+- `?limit=50` افتراضي، `?limit=1000` أقصى.
+- طلب بلا `limit` → يُرد بـ default 50 (ليس الكل).
+- `?offset=N` للصفحة التالية.
+- Response shape: `{ data: [...], meta: { limit, offset, total } }`.
+- الـ hot tables (orders, payments, bonuses, activity_log) قد تستخدم keyset pagination (`?cursor=base64(last_id)`) لتجنب `OFFSET` الكبيرة.
+
+UI يعرض Pagination component (shadcn) أسفل كل DataTable.

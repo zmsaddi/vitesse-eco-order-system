@@ -1,10 +1,61 @@
 # لوحة التحكم — Dashboard Requirements
 
-> **رقم العنصر**: #25 | **المحور**: هـ | **الحالة**: قيد التحديث
+> **رقم العنصر**: #25 | **المحور**: هـ | **الحالة**: مواصفات نهائية
+> **صلاحية**: `dashboard:view` موجودة لكل الأدوار الـ 6 في `15_Roles_Permissions.md`. المحتوى يختلف بحسب الدور ونطاق الرؤية (`16_Data_Visibility.md`).
 
 ---
 
-## المبدأ: Dashboard مخصص لكل دور
+## المبدأ (D-72 محدِّث — Post-Round-7)
+
+**Role home يختلف حسب نوع الدور**:
+
+| الدور | Home | النوع |
+|-------|------|-------|
+| seller | `/orders` | task-first (موجود أصلاً) |
+| driver | `/driver-tasks` | task-first (موجود أصلاً) |
+| stock_keeper | `/preparation` | task-first (موجود أصلاً) |
+| manager | `/action-hub` | **Action Hub خفيف (D-72 — جديد)** |
+| gm | `/action-hub` | **Action Hub خفيف (D-72 — جديد)** |
+| pm | `/action-hub` | **Action Hub خفيف (D-72 — جديد)** |
+
+**Dashboard الكامل (`/dashboard`)** يظل متاحاً لـ PM/GM/manager، لكن **ليس الصفحة الأولى**. يُفتَح من Action Hub عبر زر "عرض Dashboard الكامل".
+
+---
+
+## Action Hub لـ admin roles (D-72)
+
+**مبدأ**: الصفحة الأولى للـ PM/GM/manager = "ماذا تحتاج فعل الآن؟"، ليس charts.
+
+### المحتوى (3 أقسام فقط)
+
+1. **إجراءات مُلحَّة** (top section — ما يحتاج قراراً من المستخدم):
+   - Overdue payments (orders ≥ 7 أيام بلا تحصيل).
+   - Reconciliation due today (manager/GM).
+   - Pending cancellations needing approval.
+   - Stale commission snapshots > 60 يوم (D-53).
+   - Low stock products (count فقط — رابط لـ `/inventory`).
+   - Settings incomplete (إذا D-35 mandatory mentions placeholders فارغة).
+   - كل item = بطاقة مع CTA مباشر (لا navigation ضائع).
+
+2. **آخر نشاط** (5 صفوف فقط):
+   - آخر 5 عمليات من فريق المستخدم (manager = فريقه، pm/gm = كل النظام).
+   - كل صف: user + action + entity + timestamp + رابط.
+
+3. **حالة الفرق (counts فقط — لا charts)**:
+   - Orders today: N
+   - Deliveries pending: N
+   - Low stock count: N
+   - Open cancellations: N
+
+### زر "عرض Dashboard الكامل"
+
+يفتح `/dashboard` (الـ full dashboard أدناه) للـ deep analysis + charts + KPIs + فترات تاريخية.
+
+**السبب (D-72)**: Dashboard الثقيل ممتاز للـ monthly review، لكنه **ليس** نقطة البداية اليومية. Action Hub يُوجِّه المستخدم للإجراء التالي فوراً.
+
+---
+
+## Dashboard الكامل (ثانوي، يُفتَح يدوياً من Action Hub)
 
 ---
 
@@ -30,24 +81,14 @@
 
 ---
 
-### Seller Dashboard
+### Operational Roles (seller / driver / stock_keeper) — No Dashboard (D-72)
 
-**بطاقات KPI:** مبيعاتي، عمولاتي المكتسبة، عمولاتي غير المصروفة، هذا الشهر
-**محتوى:** جدول آخر مبيعاتي + هدايا متاحة
-**إجراءات سريعة:** + طلب جديد
+الأدوار التشغيلية **تهبط مباشرة على شاشة المهام** (task-first موجود أصلاً في [03_Modules_List.md:166-168](03_Modules_List.md#L166)):
 
----
+- **seller** → `/orders` (قائمة طلباتي + زر "طلب جديد" بارز).
+- **driver** → `/driver-tasks` (بطاقات المهام + CTA "تسليم الأموال" إن كان هناك عهدة مستحقة).
+- **stock_keeper** → `/preparation` (طلبات بانتظار التحضير + تنبيهات نقص المخزون inline).
 
-### Driver Dashboard
+**لا dashboard منفصل** لهذه الأدوار في MVP (D-71 + D-72). KPIs شخصية (مبيعاتي، عمولاتي، مهامي اليوم) تظهر كـ **header cards** في أعلى شاشة المهام، ليس صفحة مستقلة.
 
-**بطاقات KPI:** مهامي اليوم (بانتظار/جاري/مكتمل)، أموال بحوزتي، عمولاتي
-**محتوى:** قائمة مهامي + زر تسليم الأموال
-**إجراءات سريعة:** تسليم الأموال
-
----
-
-### Stock Keeper Dashboard
-
-**بطاقات KPI:** طلبات تنتظر تحضير، منتجات نفذت، منتجات منخفضة
-**محتوى:** قائمة الطلبات المنتظرة + تنبيهات نقص المخزون
-**إجراءات سريعة:** بدء جرد
+**المبرر**: المستخدم التشغيلي يحتاج "المهمة التالية" فوراً. Dashboard منفصل = نقرة إضافية لفهم ما يجب فعله.

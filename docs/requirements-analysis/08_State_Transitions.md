@@ -1,23 +1,23 @@
 # خريطة الحالات والانتقالات — State Transitions
 
-> **رقم العنصر**: #08 | **المحور**: ب | **الحالة**: قيد التحديث
+> **رقم العنصر**: #08 | **المحور**: ب | **الحالة**: مواصفات نهائية
 
 ---
 
 ## 1. حالات الطلب (Order Status)
 
 ```
-محجوز ──→ قيد_التحضير ──→ جاهز ──→ مؤكد
+محجوز ──→ قيد التحضير ──→ جاهز ──→ مؤكد
   │            │              │
   └──→ ملغي ←─┘──→ ملغي ←────┘──→ ملغي
 ```
 
 | من | إلى | المُنفّذ | الشرط |
 |----|-----|---------|-------|
-| محجوز | قيد_التحضير | النظام (تلقائي) | عند تعيين stock_keeper أو بدء التحضير |
+| محجوز | قيد التحضير | النظام (تلقائي) | عند تعيين stock_keeper أو بدء التحضير |
 | محجوز | ملغي | PM/GM/Manager/Seller(خاصتي) | شاشة C1 + سبب |
-| قيد_التحضير | جاهز | Stock Keeper / PM/GM/Manager | بعد تحضير كل الأصناف |
-| قيد_التحضير | ملغي | PM/GM/Manager | شاشة C1 + سبب |
+| قيد التحضير | جاهز | Stock Keeper / PM/GM/Manager | بعد تحضير كل الأصناف |
+| قيد التحضير | ملغي | PM/GM/Manager | شاشة C1 + سبب |
 | جاهز | مؤكد | السائق/PM/GM/Manager | عند تأكيد التسليم |
 | جاهز | ملغي | PM/GM/Manager | شاشة C1 + سبب |
 | مؤكد | ملغي | PM/GM | شاشة C1 + سبب (عمولات → دين إذا مصروفة) |
@@ -50,7 +50,7 @@ pending ──→ partial ──→ paid
 ## 3. حالات التوصيل (Delivery Status)
 
 ```
-قيد الانتظار ──→ قيد_التحضير ──→ جاهز ──→ جاري التوصيل ──→ تم التوصيل
+قيد الانتظار ──→ قيد التحضير ──→ جاهز ──→ جاري التوصيل ──→ تم التوصيل
       │               │            │              │
       └── ملغي ←───────┘── ملغي ←──┘── ملغي ←─────┘
                                     (يعود قيد الانتظار)
@@ -58,8 +58,8 @@ pending ──→ partial ──→ paid
 
 | من | إلى | المُنفّذ | الشرط |
 |----|-----|---------|-------|
-| قيد الانتظار | قيد_التحضير | النظام | مع حالة الطلب |
-| قيد_التحضير | جاهز | Stock Keeper | بعد تحضير الأصناف |
+| قيد الانتظار | قيد التحضير | النظام | مع حالة الطلب |
+| قيد التحضير | جاهز | Stock Keeper | بعد تحضير الأصناف |
 | جاهز | جاري التوصيل | السائق/PM/GM/Manager | بعد تعيين سائق |
 | جاري التوصيل | تم التوصيل | السائق/PM/GM/Manager | VIN + تأكيد → عمولة + فاتورة |
 | جاري التوصيل | قيد الانتظار | PM/GM/Manager | إلغاء توصيل + سبب (قرار H2) — ليس إلغاء بيع |
@@ -100,16 +100,33 @@ pending ──→ in_progress ──→ completed
 ## 6. حالات العمولة (Bonus Status)
 
 ```
-unsettled ──→ settled
-     │
-     └──→ cancelled (debt) / deleted
+           ┌──→ retained (keep)
+unsettled ─┼──→ deleted (cancel_unpaid)
+           └──→ settled ──→ negative_settlement_debt (cancel_as_debt)
 ```
 
-| من | إلى | الشرط |
-|----|-----|-------|
-| unsettled | settled | عند التسوية (settlement) |
-| unsettled | deleted | عند إلغاء الطلب + اختيار "إلغاء" في شاشة C1 |
-| settled | debt | عند إلغاء الطلب + اختيار "إلغاء" في شاشة C1 (تسوية سالبة) |
+| من | إلى | الـ action | الشرط |
+|----|-----|-----------|-------|
+| unsettled | retained | `keep` | `cancellations.seller_bonus_action='keep'` — يُعلَم بـ status='retained'، يُستبعد من التسويات |
+| unsettled | deleted | `cancel_unpaid` | `cancellations.seller_bonus_action='cancel_unpaid'` — DELETE مباشر |
+| unsettled | settled | — | عبر تسوية ناجحة |
+| settled | negative_debt | `cancel_as_debt` | `cancellations.seller_bonus_action='cancel_as_debt'` — INSERT صف settlement سالب |
+
+### الـ 7 invariants الحاكمة للإلغاء
+
+كل اختبار يحمي قاعدة تجارية. تُنفَّذ كـ Vitest specs في Phase 3.
+
+| # | Invariant | الوصف |
+|---|-----------|-------|
+| C1 | hard cancel bonuses | `bonusActions={cancel_unpaid, cancel_unpaid}` + `return_to_stock=true` → status=ملغي، stock مُستعاد، bonuses DELETEd على السطح (في الواقع soft-delete)، invoice=ملغي، activity_log مكتوب |
+| C2 | keep bonuses | `bonusActions={keep, keep}` → status=ملغي لكن bonuses موجودة بـ status=retained |
+| C3 | required choice | POST cancel بلا bonusActions + bonuses exist → 428 BONUS_CHOICE_REQUIRED مع preview |
+| C4 | settled bonus as debt | `bonusActions.seller=cancel_as_debt` + bonus.settled=true → INSERT settlement سالب مقابل |
+| C5 | preview safety | GET cancel/preview لا يكتب أي شيء؛ يعمل حتى على سجل ملغي مسبقاً |
+| C7 | cancel delivery ≠ cancel order | إلغاء توصيل `جاري التوصيل` → يعود `قيد الانتظار`، الطلب يبقى `محجوز` (قرار H2) |
+| C8 | idempotency | POST cancel مرتين → الثانية 409 ALREADY_CANCELLED، لا تغيير على الحالة المالية |
+
+**ملاحظة**: invariant C6 السابقة (hard-delete بواسطة PM) **محذوفة كلياً** (D-04). لا endpoint يُنفِّذ DELETE فعلي على الطلبات/التوصيلات/الفواتير/العمولات حتى لـ PM. الحذف الناعم مطلق (BR-48). القائمة الآن 7 invariants (C1..C5 + C7 + C8).
 
 ---
 

@@ -1,12 +1,58 @@
 # القواعد المحاسبية — Accounting Rules
 
-> **رقم العنصر**: #12 | **المحور**: ب | **الحالة**: قيد التحديث
+> **رقم العنصر**: #12 | **المحور**: ب | **الحالة**: مواصفات نهائية
 
 ---
 
 ## المبدأ الأساسي
 
-**كل الأرقام TTC** — TVA تُحسب فقط عند توليد الفاتورة (قرار H1).
+**كل الأرقام TTC** — TVA لا تُخزَّن في أي جدول حركي (D-02 + H1).
+**استثناء (D-30)**: عند **إصدار** الفاتورة، TVA تُجمَّد في `invoices.tva_amount_frozen` + `invoice_lines.vat_amount_frozen` لضمان inaltérabilité (loi anti-fraude TVA 2018).
+
+## النظام **ليس** نظام محاسبة رسمي (D-36 — FEC Delegation)
+
+**هذا النظام هو نظام إدارة عمليات + caisse + facturation — وليس نظام tenue de comptabilité بمفهوم PCG 2014.**
+
+- المشروع **لا يُنتج** Journal comptable رسمياً.
+- المشروع **لا يُنتج** FEC (Fichier des Écritures Comptables) بنفسه.
+- المحاسبة الخارجية (**expert-comptable**) تتولى ذلك وفق خطاب تعهُّد موقَّع في `docs/compliance/fec_delegation.md` (D-36).
+
+### ماذا يُصدِّر النظام شهرياً للـ expert-comptable:
+1. **PDF الفواتير** (تُرسَل تلقائياً أو تُنزَّل): كل الفواتير + Avoirs.
+2. **CSV الدفعات** (`payments.csv`): date, amount signed, payment_method, order_ref, client.
+3. **CSV حركات الصندوق** (`treasury_movements.csv`).
+4. **CSV المصاريف** (`expenses.csv`) مع عمود `comptable_class` (D-61 — PCG class).
+5. **CSV المشتريات** (`purchases.csv`).
+6. **CSV الإلغاءات** (`cancellations.csv`).
+
+### ما تُنفِّذه الـ expert-comptable:
+1. إدخال/import الـ CSV + PDF في برنامج محاسبي احترافي (Sage, Cegid, ACD — certified NF525).
+2. إنشاء Journal comptable + Grand-livre بأرقام حسابات PCG (411 Clients, 530 Caisse, 512 Banque, 401 Fournisseurs, 607 Achats, 706 Prestations, 445 TVA...).
+3. إنتاج FEC عند طلب DGFiP.
+4. إنتاج déclaration TVA (CA3) شهرياً/ربعياً.
+5. حفظ الأرشفة 10 سنوات (C. com L123-22).
+
+**المرجع القانوني**: CGI art. L47 A-I + décret 2013-346 + LPF art. A47 A-1 + PCG 2014.
+
+---
+
+## التعامل مع TVA
+
+- المشروع **لا يحسب** إعلانات TVA الشهرية داخلياً. المحاسبة الخارجية (expert-comptable) تتولى ذلك من الفواتير PDF (pièces justificatives).
+- المشروع يُخزِّن **TTC فقط** في كل الجداول المالية (`payments.amount`, `orders.total_amount`, `order_items.line_total`, `invoices.total`، إلخ).
+- عند render الفاتورة PDF، TVA تُحسب:
+
+```
+vatRate    = settings.vat_rate    // افتراضي "20"
+totalTTC   = order.total_amount
+vatAmount  = round2(totalTTC × vatRate / (100 + vatRate))
+totalHT    = round2(totalTTC - vatAmount)
+```
+
+Helper: `tvaFromTtc(ttc, rate)` و `htFromTtc(ttc, rate)` في `src/lib/tva.ts`.
+
+- الفاتورة PDF تُعرض: السعر HT + معدل TVA% + مبلغ TVA + المجموع TTC (متطلب قانوني فرنسي).
+- `payments.amount` موقَّع (collection موجب، refund سالب، advance موجب) — يُغذّي P&L وتوزيع الأرباح (D-06).
 
 ---
 
@@ -51,8 +97,10 @@
 | funding | تمويل من GM لمدير | transfer |
 | bank_deposit | إيداع كاش في بنك | transfer |
 | bank_withdrawal | سحب من بنك | transfer |
-| refund | استرداد عند إلغاء | inflow |
-| supplier_credit | رصيد دائن لمورد | outflow (محاسبي) |
+| refund | استرداد عند إلغاء (موقَّع سالب في payments) | inflow (سالب — يُنقِص الرصيد) |
+| reconciliation | تسجيل فرق في التسوية اليومية | inflow/outflow حسب الإشارة |
+
+**ملاحظة**: `supplier_credit` **محذوف** من treasury_movements (D-10). الرصيد الدائن للمورد يُدار في `suppliers.credit_due_from_supplier`، خارج treasury — لأنه receivable ليس cash.
 
 ---
 
@@ -86,18 +134,6 @@
 3. الفرق يُسجل كحركة reconciliation (+ أو -)
 
 ---
-
-## TVA — للفاتورة فقط
-
-```
-vatRate = settings.vat_rate (افتراضي 20%)
-tvaAmount = amountTTC × vatRate / (100 + vatRate)
-amountHT = amountTTC - tvaAmount
-```
-
-- لا تُخزّن في أي جدول
-- تُحسب عند توليد PDF
-- الفاتورة بالفرنسية (متطلب قانوني)
 
 ---
 

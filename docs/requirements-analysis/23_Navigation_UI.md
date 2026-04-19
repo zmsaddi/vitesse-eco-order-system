@@ -1,6 +1,6 @@
 # التنقل والواجهة — Navigation & UI
 
-> **رقم العنصر**: #23 | **المحور**: د | **الحالة**: قيد التحديث
+> **رقم العنصر**: #23 | **المحور**: د | **الحالة**: مواصفات نهائية
 
 ---
 
@@ -41,7 +41,7 @@
 ## RTL
 
 - `direction: rtl` على html
-- خط Cairo (Google Fonts via next/font)
+- خط Cairo **محلي** عبر `next/font/local` (D-15) — ملفات TTF في `public/fonts/cairo/`
 - حقول LTR: هاتف، إيميل، VIN، أرقام، username
 - Sidebar يمين، محتوى يسار
 
