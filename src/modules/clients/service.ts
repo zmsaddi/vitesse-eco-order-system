@@ -181,15 +181,23 @@ async function assertNoDuplicate(
  * Maps a Postgres unique_violation (SQLSTATE 23505) to a ConflictError.
  * Race-safe last line of defense when two concurrent transactions both pass
  * the app-level pre-check and one loses at the DB index.
+ *
+ * Phase 2b.1.1 correction: node-postgres / @neondatabase/serverless expose the
+ * violated constraint name via the `constraint` property (NOT `constraint_name`).
+ * The earlier code read the wrong key, so axis was always defaulted to "phone"
+ * even when the email index was the one that fired. Now keyed correctly.
+ *
+ * Exported (not just internal) so it can be unit-tested directly — the integration
+ * tests only exercise the app-level pre-check path, not this race-safe fallback.
  */
-function mapUniqueViolation(
+export function mapUniqueViolation(
   err: unknown,
   input: Pick<CreateClientInput, "name" | "phone" | "email">,
 ): unknown {
-  const pgErr = err as { code?: string; constraint_name?: string; message?: string } | null;
+  const pgErr = err as { code?: string; constraint?: string; message?: string } | null;
   if (!pgErr || pgErr.code !== "23505") return err;
 
-  const constraint = pgErr.constraint_name ?? "";
+  const constraint = pgErr.constraint ?? "";
   let axis: "phone" | "email" = "phone";
   let userMsg = `عميل بنفس الاسم والهاتف موجود مسبقاً`;
   if (constraint.includes("email")) {
