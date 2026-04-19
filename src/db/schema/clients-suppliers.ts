@@ -35,21 +35,31 @@ export const clients = pgTable(
 
 // Table 6: suppliers (soft-disable via active — D-76 replaces DELETE endpoint)
 // credit_due_from_supplier renamed via D-62.
-export const suppliers = pgTable("suppliers", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  phone: text("phone").default(""),
-  address: text("address").default(""),
-  notes: text("notes").default(""),
-  creditDueFromSupplier: numeric("credit_due_from_supplier", { precision: 19, scale: 2 })
-    .notNull()
-    .default("0"),
-  active: boolean("active").notNull().default(true),
-  updatedBy: text("updated_by"),
-  updatedAt: timestamp("updated_at", { withTimezone: true }),
-  deletedAt: timestamp("deleted_at", { withTimezone: true }),
-  deletedBy: text("deleted_by"),
-});
+// 02_DB_Tree.md + 36_Performance.md: partial unique on (name, phone) where
+// phone is non-empty and row isn't soft-deleted — prevents alias credit splits.
+export const suppliers = pgTable(
+  "suppliers",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    phone: text("phone").default(""),
+    address: text("address").default(""),
+    notes: text("notes").default(""),
+    creditDueFromSupplier: numeric("credit_due_from_supplier", { precision: 19, scale: 2 })
+      .notNull()
+      .default("0"),
+    active: boolean("active").notNull().default(true),
+    updatedBy: text("updated_by"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedBy: text("deleted_by"),
+  },
+  (t) => [
+    uniqueIndex("suppliers_name_phone_active_unique")
+      .on(t.name, t.phone)
+      .where(sql`${t.phone} <> '' AND ${t.deletedAt} IS NULL`),
+  ],
+);
 
 // Table 7: supplier_payments
 export const supplierPayments = pgTable("supplier_payments", {

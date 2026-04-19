@@ -92,6 +92,84 @@ describe.skipIf(!HAS_DB)("/api/v1/suppliers — CRUD (requires TEST_DATABASE_URL
     expect(body.supplier.name).toBe("مورد القاهرة");
   });
 
+  // Phase 2c.1 — dedup guard. Requires migration 0004 (partial unique on name+phone).
+  it("POST rejects duplicate (name, phone) with 409 DUPLICATE_SUPPLIER", async () => {
+    const { POST } = await freshListRoute();
+    const res = await POST(
+      new Request("http://localhost/api/v1/suppliers", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "مورد القاهرة",
+          phone: "+33111111111", // same (name, phone) pair as the first case
+        }),
+      }),
+    );
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { code: string; details?: { axis?: string } };
+    expect(body.code).toBe("DUPLICATE_SUPPLIER");
+    expect(body.details?.axis).toBe("phone");
+  });
+
+  it("POST allows same name when phone is empty (partial index doesn't fire)", async () => {
+    const { POST } = await freshListRoute();
+    const res1 = await POST(
+      new Request("http://localhost/api/v1/suppliers", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "مورد بلا هاتف", phone: "" }),
+      }),
+    );
+    expect(res1.status).toBe(201);
+    const res2 = await POST(
+      new Request("http://localhost/api/v1/suppliers", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "مورد بلا هاتف", phone: "" }),
+      }),
+    );
+    expect(res2.status).toBe(201);
+  });
+
+  it("PUT that would collide with ANOTHER supplier → 409 (the Fix 1b update path)", async () => {
+    // Create a second supplier with a unique phone.
+    const { POST } = await freshListRoute();
+    await POST(
+      new Request("http://localhost/api/v1/suppliers", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "مورد-ب",
+          phone: "+33122222222",
+        }),
+      }),
+    );
+
+    const { withRead } = await import("@/db/client");
+    const { suppliers } = await import("@/db/schema");
+    const rows = await withRead(undefined, async (db) =>
+      db.select().from(suppliers).where(eq(suppliers.name, "مورد-ب")).limit(1),
+    );
+    const secondId = rows[0].id;
+
+    // Attempt to update secondId to collide with the first supplier's (name, phone).
+    const { PUT } = await freshDynamicRoute();
+    const res = await PUT(
+      new Request(`http://localhost/api/v1/suppliers/${secondId}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "مورد القاهرة",
+          phone: "+33111111111",
+        }),
+      }),
+      { params: Promise.resolve({ id: String(secondId) }) },
+    );
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { code: string };
+    expect(body.code).toBe("DUPLICATE_SUPPLIER");
+  });
+
   it("GET lists suppliers with pagination", async () => {
     const { GET } = await freshListRoute();
     const res = await GET(new Request("http://localhost/api/v1/suppliers?limit=10&offset=0"));

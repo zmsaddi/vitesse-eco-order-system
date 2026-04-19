@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "suppliers_name_phone_active_unique" ON "suppliers" USING btree ("name","phone") WHERE "suppliers"."phone" <> '' AND "suppliers"."deleted_at" IS NULL;

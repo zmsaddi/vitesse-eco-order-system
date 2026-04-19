@@ -29,6 +29,13 @@
       "when": 1776626350882,
       "tag": "0003_clients_dedup_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1776640413459,
+      "tag": "0004_suppliers_dedup_indexes",
+      "breakpoints": true
     }
   ]
 }

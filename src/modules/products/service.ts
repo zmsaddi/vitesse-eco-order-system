@@ -1,13 +1,23 @@
-import { and, asc, count, eq } from "drizzle-orm";
+import { and, asc, count, eq, sql } from "drizzle-orm";
 import type { DbHandle, DbTx } from "@/db/client";
-import { products, settings } from "@/db/schema";
+import { products } from "@/db/schema";
 import { BusinessRuleError, ConflictError, NotFoundError } from "@/lib/api-errors";
 import { productRowToDto } from "./mappers";
 import type { CreateProductInput, ProductDto, UpdateProductPatch } from "./dto";
 
 // D-68 + D-69: products service.
 // Soft-disable via `active=false` (H6 — never hard-deleted; preserves price_history + order refs).
-// D-25: sku_limit enforced from settings before INSERT.
+//
+// D-25 (sku_limit): enforced inside a transaction. Default isolation (READ COMMITTED)
+// allows two concurrent COUNT()-then-INSERT pairs to both pass the limit check.
+// Phase 2c.1 mitigation: we SELECT the sku_limit row FOR UPDATE, which serializes
+// createProduct across concurrent transactions on the sku_limit setting row. When
+// the limit row is missing, we fall back to an advisory transaction lock so that
+// a fresh DB (no settings row yet) isn't silently race-prone.
+//
+// Dup names: DB has `products_name_unique` constraint. Pre-check + 23505 mapping
+// (Phase 2c.1) so a race returns 409 DUPLICATE_PRODUCT_NAME instead of 500.
+const SKU_LIMIT_ADVISORY_KEY = 826351;
 
 export type ListProductsOptions = {
   limit?: number;
@@ -49,10 +59,10 @@ export async function createProduct(
   input: CreateProductInput,
   createdBy: string,
 ): Promise<ProductDto> {
-  // D-25: sku_limit enforcement before INSERT.
+  // D-25: sku_limit enforcement under a lock so concurrent creates can't race past.
   await assertWithinSkuLimit(tx);
 
-  // Name uniqueness pre-check (schema has UNIQUE on products.name).
+  // Name uniqueness pre-check (schema has UNIQUE on products.name — `products_name_unique`).
   const existing = await tx.select().from(products).where(eq(products.name, input.name)).limit(1);
   if (existing.length > 0) {
     throw new ConflictError(
@@ -62,25 +72,47 @@ export async function createProduct(
     );
   }
 
-  const inserted = await tx
-    .insert(products)
-    .values({
-      name: input.name,
-      category: input.category,
-      unit: input.unit,
-      buyPrice: input.buyPrice.toFixed(2),
-      sellPrice: input.sellPrice.toFixed(2),
-      stock: input.stock.toFixed(2),
-      lowStockThreshold: input.lowStockThreshold,
-      descriptionAr: input.descriptionAr,
-      descriptionLong: input.descriptionLong,
-      specs: input.specs,
-      catalogVisible: input.catalogVisible,
-      notes: input.notes,
-      createdBy,
-    })
-    .returning();
-  return productRowToDto(inserted[0]);
+  try {
+    const inserted = await tx
+      .insert(products)
+      .values({
+        name: input.name,
+        category: input.category,
+        unit: input.unit,
+        buyPrice: input.buyPrice.toFixed(2),
+        sellPrice: input.sellPrice.toFixed(2),
+        stock: input.stock.toFixed(2),
+        lowStockThreshold: input.lowStockThreshold,
+        descriptionAr: input.descriptionAr,
+        descriptionLong: input.descriptionLong,
+        specs: input.specs,
+        catalogVisible: input.catalogVisible,
+        notes: input.notes,
+        createdBy,
+      })
+      .returning();
+    return productRowToDto(inserted[0]);
+  } catch (err) {
+    throw mapUniqueViolation(err, input.name);
+  }
+}
+
+/**
+ * Maps PG 23505 on `products_name_unique` to a friendly 409 DUPLICATE_PRODUCT_NAME.
+ * Race-safe fallback when two concurrent transactions both pass the pre-check.
+ * Exported for direct unit testing. Reads `constraint` (not `constraint_name` —
+ * see Phase 2b.1.1 errata for clients).
+ */
+export function mapUniqueViolation(err: unknown, name: string): unknown {
+  const pgErr = err as { code?: string; constraint?: string } | null;
+  if (!pgErr || pgErr.code !== "23505") return err;
+  const constraint = pgErr.constraint ?? "";
+  if (!constraint.includes("name")) return err; // not the name constraint — let it propagate
+  return new ConflictError(
+    "منتج بنفس الاسم موجود مسبقاً. اختر اسماً آخر.",
+    "DUPLICATE_PRODUCT_NAME",
+    { constraint, dupeName: name },
+  );
 }
 
 export async function updateProduct(
@@ -140,19 +172,39 @@ export async function updateProduct(
   if (patch.notes !== undefined) patchValues.notes = patch.notes;
   if (patch.active !== undefined) patchValues.active = patch.active;
 
-  const updated = await tx.update(products).set(patchValues).where(eq(products.id, id)).returning();
-  return productRowToDto(updated[0]);
+  try {
+    const updated = await tx.update(products).set(patchValues).where(eq(products.id, id)).returning();
+    return productRowToDto(updated[0]);
+  } catch (err) {
+    // Only maps if the name was part of the patch AND it collides.
+    throw mapUniqueViolation(err, patch.name ?? current.name);
+  }
 }
 
-// D-25: sku_limit = max active products. Read from settings (default 500).
+/**
+ * D-25: sku_limit = max active products. Read from settings (default 500).
+ *
+ * Race-safety (Phase 2c.1):
+ * - Primary path: `SELECT … FOR UPDATE` on the settings row for "sku_limit".
+ *   This is a row-level lock that every concurrent createProduct contends on, so
+ *   the COUNT(*) → INSERT sequence after it is serialized across transactions.
+ * - Fallback path: if the settings row is missing (fresh DB, seed incomplete), we
+ *   take a transaction-scoped advisory lock on a constant key so races still can't
+ *   slip past. Released automatically when the tx commits or aborts.
+ */
 async function assertWithinSkuLimit(tx: DbTx): Promise<void> {
-  const [limitRow] = await tx
-    .select()
-    .from(settings)
-    .where(eq(settings.key, "sku_limit"))
-    .limit(1);
-  const limit = limitRow ? Number(limitRow.value) : 500;
-  if (!Number.isFinite(limit)) return; // malformed setting — don't block
+  const lockedRows = await tx.execute(
+    sql`SELECT value FROM settings WHERE key = 'sku_limit' FOR UPDATE`,
+  );
+  const rows = (lockedRows as { rows?: { value?: string }[] }).rows ?? [];
+  let limit = 500;
+  if (rows.length > 0) {
+    const raw = Number(rows[0].value);
+    if (Number.isFinite(raw)) limit = raw;
+  } else {
+    // Row missing — fall back to advisory xact lock so concurrent creates still serialize.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${SKU_LIMIT_ADVISORY_KEY})`);
+  }
 
   const [{ total }] = await tx
     .select({ total: count() })

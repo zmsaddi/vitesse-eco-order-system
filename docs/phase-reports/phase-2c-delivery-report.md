@@ -222,3 +222,67 @@ Phase 2c delivers three feature CRUD domains with the same discipline Phase 2b e
 One mid-flight issue surfaced: Zod v4's `z.record(enum, …)` is strict in v4 (was lax in v3). Caught by the DTO unit tests (first run: 2 red). Swapped to `z.partialRecord` + added a defensive `undefined` filter in `updateSettings`. Second run: all green. Exactly the failure mode unit tests are for.
 
 Nothing over-claimed. 29 unit + 17 skippable integration cases back every feature in this tranche. All 13 gates green where "real", placeholders still placeholders.
+
+---
+
+## Errata (added post-review — 2026-04-20)
+
+External review of the Phase 2c working tree (pre-commit) flagged three real gaps.
+The body above is left intact as a historical snapshot; read this section
+alongside it. All three were closed in **Phase 2c.1** (separate report + commit
+on top of the Phase 2c tree).
+
+### §2 — Suppliers unique invariant was missing
+
+- **What the body says**: suppliers module "mirrors" the clients pattern.
+- **What was actually true at pre-commit time**: `src/db/schema/clients-suppliers.ts`
+  had no partial `uniqueIndex` on suppliers, and the service comment explicitly
+  said "no unique index on (name, phone) yet". That violates
+  `docs/requirements-analysis/02_DB_Tree.md` line 178 and
+  `docs/requirements-analysis/36_Performance.md` line 66, which mandate the
+  partial unique for suppliers too (same shape as clients). Until the Phase 2c.1
+  fix, duplicate supplier rows with the same name+phone could have been
+  inserted — a real risk for `credit_due_from_supplier` and payment allocation
+  splitting across aliases.
+- **Correction (Phase 2c.1)**: added `suppliers_name_phone_active_unique` in the
+  schema + migration `0004_suppliers_dedup_indexes.sql`; rewrote supplier
+  service with `assertNoDuplicate` + `mapUniqueViolation` (409 DUPLICATE_SUPPLIER);
+  added unit tests + integration dedup cases.
+
+### §10 — D-25 sku_limit claim was wrong
+
+- **Body says**: "enforced inside a transaction — assertWithinSkuLimit + INSERT
+  run under withTxInRoute so the active-count check and the insert can't race
+  past the limit."
+- **Reality**: under default READ COMMITTED isolation, two concurrent
+  transactions can both run `COUNT(active products) < limit` before either
+  INSERT commits, then both INSERT — both pass, limit is exceeded by 1. The
+  claim was a behavioural guarantee we did not actually provide.
+- **Correction (Phase 2c.1)**: `assertWithinSkuLimit` now does
+  `SELECT value FROM settings WHERE key='sku_limit' FOR UPDATE` before
+  COUNT-ing. The row-level lock serializes concurrent createProduct calls on
+  the sku_limit setting row, so the count-then-insert sequence is atomic across
+  transactions. When the row is absent (fresh DB), a transaction-scoped
+  `pg_advisory_xact_lock` takes its place. The claim is now accurate.
+
+### §2/§10 — Products duplicate-name race left 500 on the table
+
+- **Body says**: pre-check + name-uniqueness enforcement.
+- **Reality**: pre-check existed, but concurrent callers that both passed it
+  would collide at the DB (`products_name_unique`) and return a raw 500 instead
+  of a friendly 409 DUPLICATE_PRODUCT_NAME.
+- **Correction (Phase 2c.1)**: exported `mapUniqueViolation(err, name)` that
+  reads `pgErr.constraint` (NOT `constraint_name` — same learning as Phase
+  2b.1.1). Both createProduct and updateProduct wrap the write in a try/catch
+  that passes through non-name 23505's and maps the name collision to 409.
+  Direct unit tests cover the mapper (incl. regression guard for the property
+  name mistake).
+
+### Test-count update
+
+- **Body says**: 141 unit + 57 integration = **198**.
+- **Post-2c.1**: **151** unit + **60** integration = **211** (+10 unit from the
+  two mapper suites, +3 integration for suppliers dedup). Still passes locally;
+  skippable cases unchanged in spirit.
+
+No other body claims are affected by Phase 2c.1.
