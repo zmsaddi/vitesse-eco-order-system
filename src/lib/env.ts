@@ -52,3 +52,15 @@ export function env(): Env {
   cached = parsed.data;
   return cached;
 }
+
+/**
+ * Test-only: flush the env singleton so subsequent env() calls re-parse process.env.
+ * Call from `beforeEach` when a test mutates process.env (e.g. adding / removing
+ * INIT_BOOTSTRAP_SECRET); otherwise the first call's snapshot masks later changes
+ * and tests can pass for the wrong reason.
+ *
+ * Do NOT use in production code.
+ */
+export function resetEnvCacheForTesting(): void {
+  cached = null;
+}
