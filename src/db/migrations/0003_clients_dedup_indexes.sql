@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX "clients_name_phone_active_unique" ON "clients" USING btree ("name","phone") WHERE "clients"."phone" <> '' AND "clients"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "clients_name_email_active_unique" ON "clients" USING btree ("name","email") WHERE "clients"."email" <> '' AND "clients"."deleted_at" IS NULL;

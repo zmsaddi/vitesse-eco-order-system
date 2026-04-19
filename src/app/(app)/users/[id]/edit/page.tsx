@@ -1,8 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { enforcePageRole } from "@/lib/session-claims";
 import { withRead, withTxInRoute } from "@/db/client";
-import { getUserById, updateUser, type UpdateUserInput } from "@/modules/users/service";
-import { RoleDto, type UserDto } from "@/modules/users/dto";
+import { getUserById, updateUser } from "@/modules/users/service";
+import { UpdateUserPatch, type UserDto } from "@/modules/users/dto";
 import { NotFoundError } from "@/lib/api-errors";
 import { PageShell } from "@/components/ui/PageShell";
 import { FormCard, Field } from "@/components/ui/FormCard";
@@ -17,18 +17,30 @@ async function updateUserAction(formData: FormData): Promise<never> {
   const id = Number(formData.get("id") ?? "0");
   if (!Number.isFinite(id) || id < 1) redirect("/users");
 
+  // Phase 2b.1: validate with the SAME UpdateUserPatch Zod schema the API route uses.
+  // Previously this action built a patch manually and bypassed the API's validator.
+  const nameRaw = String(formData.get("name") ?? "").trim();
   const roleRaw = String(formData.get("role") ?? "");
-  const roleParsed = RoleDto.safeParse(roleRaw);
+  const profitShareRaw = formData.get("profitSharePct");
 
-  const patch: UpdateUserInput = {
-    name: String(formData.get("name") ?? "").trim() || undefined,
-    role: roleParsed.success ? roleParsed.data : undefined,
+  const rawPatch: Record<string, unknown> = {
     active: formData.get("active") === "on",
-    profitSharePct: Number(formData.get("profitSharePct") ?? 0),
   };
+  if (nameRaw) rawPatch.name = nameRaw;
+  if (roleRaw) rawPatch.role = roleRaw;
+  if (profitShareRaw !== null && profitShareRaw !== "") {
+    const n = Number(profitShareRaw);
+    if (!Number.isNaN(n)) rawPatch.profitSharePct = n;
+  }
+
+  const parsed = UpdateUserPatch.safeParse(rawPatch);
+  if (!parsed.success) {
+    const first = Object.keys(parsed.error.flatten().fieldErrors)[0] ?? "form";
+    redirect(`/users/${id}/edit?error=validation&field=${encodeURIComponent(first)}`);
+  }
 
   try {
-    await withTxInRoute(undefined, (tx) => updateUser(tx, id, patch, claims.username));
+    await withTxInRoute(undefined, (tx) => updateUser(tx, id, parsed.data, claims.username));
   } catch {
     redirect(`/users/${id}/edit?error=unknown`);
   }
@@ -44,7 +56,15 @@ const ROLE_OPTIONS: Array<{ value: UserDto["role"]; labelAr: string }> = [
   { value: "stock_keeper", labelAr: "أمين مخزن" },
 ];
 
-export default async function EditUserPage({ params }: Params) {
+const ERROR_MESSAGES: Record<string, string> = {
+  validation: "البيانات المدخلة غير صحيحة. راجع الحقول المميَّزة.",
+  unknown: "حدث خطأ. حاول مجدداً.",
+};
+
+export default async function EditUserPage({
+  params,
+  searchParams,
+}: Params & { searchParams: Promise<{ error?: string }> }) {
   await enforcePageRole(["pm", "gm"]);
   const { id } = await params;
   const userId = Number(id);
@@ -58,11 +78,23 @@ export default async function EditUserPage({ params }: Params) {
     throw err;
   }
 
+  const sp = await searchParams;
+  const errorMsg = sp.error ? ERROR_MESSAGES[sp.error] ?? ERROR_MESSAGES.unknown : null;
+
   return (
     <PageShell
       title={`تعديل: ${user.name}`}
       subtitle={`اسم المستخدم: ${user.username}`}
     >
+      {errorMsg && (
+        <div
+          role="alert"
+          className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
+        >
+          {errorMsg}
+        </div>
+      )}
+
       <form action={updateUserAction}>
         <input type="hidden" name="id" value={user.id} />
 

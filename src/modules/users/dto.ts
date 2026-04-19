@@ -32,3 +32,19 @@ export const CreateUserInput = z.object({
   profitShareStart: z.string().nullable().default(null),
 });
 export type CreateUserInput = z.infer<typeof CreateUserInput>;
+
+// Partial patch for PUT /api/v1/users/[id] — ALL fields optional, but at least one required.
+// Shared source of truth: imported by BOTH the API route handler AND the
+// /users/[id]/edit Server Action so both validate identically (Phase 2b.1 fix).
+export const UpdateUserPatch = z
+  .object({
+    name: z.string().min(1).max(256).optional(),
+    role: RoleDto.optional(),
+    active: z.boolean().optional(),
+    profitSharePct: z.number().min(0).max(100).optional(),
+    profitShareStart: z.string().nullable().optional(),
+  })
+  .refine((patch) => Object.keys(patch).length > 0, {
+    message: "يجب تمرير حقل واحد على الأقل للتعديل",
+  });
+export type UpdateUserPatch = z.infer<typeof UpdateUserPatch>;

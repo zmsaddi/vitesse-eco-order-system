@@ -1,28 +1,16 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { withRead, withTxInRoute } from "@/db/client";
 import { requireRole } from "@/lib/session-claims";
 import { apiError, ValidationError } from "@/lib/api-errors";
 import { getUserById, updateUser } from "@/modules/users/service";
-import { RoleDto } from "@/modules/users/dto";
+import { UpdateUserPatch } from "@/modules/users/dto";
 
 // Dynamic route PUT /api/v1/users/[id] — PM/GM only, edit user.
 // Soft-disable: pass { active: false } to deactivate (D-76 — no DELETE endpoint per D-04).
 // All fields optional; any subset can be updated.
+// Validation: UpdateUserPatch — SHARED with /users/[id]/edit Server Action (Phase 2b.1).
 
 export const runtime = "nodejs";
-
-const UpdatePatch = z
-  .object({
-    name: z.string().min(1).max(256).optional(),
-    role: RoleDto.optional(),
-    active: z.boolean().optional(),
-    profitSharePct: z.number().min(0).max(100).optional(),
-    profitShareStart: z.string().nullable().optional(),
-  })
-  .refine((patch) => Object.keys(patch).length > 0, {
-    message: "يجب تمرير حقل واحد على الأقل للتعديل",
-  });
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -52,7 +40,7 @@ export async function PUT(request: Request, { params }: Params) {
     }
 
     const body = await request.json().catch(() => null);
-    const parsed = UpdatePatch.safeParse(body);
+    const parsed = UpdateUserPatch.safeParse(body);
     if (!parsed.success) {
       throw new ValidationError("البيانات المدخلة غير صحيحة", {
         issues: parsed.error.flatten().fieldErrors,
