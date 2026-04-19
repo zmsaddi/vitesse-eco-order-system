@@ -23,6 +23,10 @@ const EnvSchema = z.object({
   // Cron (D-42 + D-43)
   CRON_SECRET: z.string().min(16).optional(),
 
+  // Init bootstrap secret — required to call POST /api/init (Phase 1a hardening).
+  // 16+ chars, random. If unset, /api/init refuses to run in non-development NODE_ENV.
+  INIT_BOOTSTRAP_SECRET: z.string().min(16).optional(),
+
   // Dev-only destructive
   ALLOW_DB_RESET: z
     .enum(["true", "false"])

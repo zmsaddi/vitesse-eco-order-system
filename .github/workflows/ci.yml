@@ -61,12 +61,14 @@ jobs:
 
       # ─────────────────────────────────────────────
       # Gate 6 — Integration tests (Neon ephemeral branch)
+      # Phase 1a: tests use `describe.skipIf(!HAS_DB)` — skip gracefully without TEST_DATABASE_URL.
+      # When the secret is provisioned, integration suite flips from "placeholder" to "real".
       # ─────────────────────────────────────────────
       - name: Gate 6 — Integration tests
         run: npm run test:integration
         env:
-          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
-          # NEON_API_KEY: لإنشاء branch عند الحاجة في Phase 4+
+          TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'ci-fallback-secret-at-least-32-chars-long' }}
 
       # ─────────────────────────────────────────────
       # Gate 7 — API contract check (OpenAPI drift)
