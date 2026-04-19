@@ -1,54 +1,41 @@
 import Link from "next/link";
 import { enforcePageRole } from "@/lib/session-claims";
 import { withRead } from "@/db/client";
-import { listUsersPaginated } from "@/modules/users/service";
+import { listActiveClients } from "@/modules/clients/service";
 import { PageShell } from "@/components/ui/PageShell";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Button } from "@/components/ui/Button";
-import type { UserDto } from "@/modules/users/dto";
+import type { ClientDto } from "@/modules/clients/dto";
 
-// Users list page — PM/GM only. Server-rendered with pagination (Phase 2b).
+// Clients list — pm/gm/manager/seller per D-12.
+// Server-rendered + paginated. Phase 3 adds search/filter + TanStack Query.
 
-const ROLE_LABELS: Record<UserDto["role"], string> = {
-  pm: "مدير المشروع",
-  gm: "مدير عام",
-  manager: "مدير فرعي",
-  seller: "بائع",
-  driver: "سائق",
-  stock_keeper: "أمين مخزن",
-};
-
-const COLUMNS: Column<UserDto>[] = [
+const COLUMNS: Column<ClientDto>[] = [
+  { key: "name", header: "الاسم", render: (c) => c.name },
   {
-    key: "username",
-    header: "اسم المستخدم",
-    render: (u) => (
-      <span className="font-mono text-sm" dir="ltr">
-        {u.username}
-      </span>
-    ),
+    key: "phone",
+    header: "الهاتف",
+    render: (c) => (c.phone ? <span dir="ltr">{c.phone}</span> : "—"),
   },
-  { key: "name", header: "الاسم", render: (u) => u.name },
-  { key: "role", header: "الدور", render: (u) => ROLE_LABELS[u.role] },
   {
-    key: "profit",
-    header: "نسبة الأرباح",
+    key: "email",
+    header: "البريد",
     mobileHidden: true,
-    align: "end",
-    render: (u) => (u.profitSharePct > 0 ? `${u.profitSharePct}%` : "—"),
+    render: (c) => (c.email ? <span dir="ltr">{c.email}</span> : "—"),
   },
   {
-    key: "status",
-    header: "الحالة",
-    render: (u) => (u.active ? "نشط" : "معطَّل"),
+    key: "city",
+    header: "العنوان",
+    mobileHidden: true,
+    render: (c) => c.address || "—",
   },
   {
     key: "actions",
     header: "",
     align: "end",
-    render: (u) => (
+    render: (c) => (
       <Link
-        href={`/users/${u.id}/edit`}
+        href={`/clients/${c.id}/edit`}
         className="text-sm text-blue-700 hover:underline dark:text-blue-400"
       >
         تعديل
@@ -58,42 +45,45 @@ const COLUMNS: Column<UserDto>[] = [
 ];
 
 type SearchParams = { page?: string };
-
 const PAGE_SIZE = 50;
 
-export default async function UsersPage({
+export default async function ClientsPage({
   searchParams,
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  await enforcePageRole(["pm", "gm"]);
+  const claims = await enforcePageRole(["pm", "gm", "manager", "seller"]);
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page ?? 1) || 1);
   const offset = (page - 1) * PAGE_SIZE;
 
   const { rows, total } = await withRead(undefined, (db) =>
-    listUsersPaginated(db, { limit: PAGE_SIZE, offset }),
+    listActiveClients(db, { limit: PAGE_SIZE, offset }),
   );
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+  // Only admin roles can edit existing clients (hide edit link for sellers — D-12).
+  const canEdit = claims.role === "pm" || claims.role === "gm" || claims.role === "manager";
+  const visibleColumns = canEdit ? COLUMNS : COLUMNS.filter((c) => c.key !== "actions");
+
   return (
     <PageShell
-      title="المستخدمون"
-      subtitle={`${total} مستخدم نشط — الصفحة ${page} من ${totalPages}`}
+      title="العملاء"
+      subtitle={`${total} عميل نشط — الصفحة ${page} من ${totalPages}`}
       actions={
-        <Link href="/users/new">
-          <Button>+ مستخدم جديد</Button>
+        <Link href="/clients/new">
+          <Button>+ عميل جديد</Button>
         </Link>
       }
     >
       <DataTable
         rows={rows}
-        columns={COLUMNS}
-        rowKey={(u) => u.id}
-        cardTitle={(u) => u.name}
+        columns={visibleColumns}
+        rowKey={(c) => c.id}
+        cardTitle={(c) => c.name}
         empty={{
-          title: "لا مستخدمون نشطون بعد",
-          description: "أنشئ أول مستخدم عبر «+ مستخدم جديد».",
+          title: "لا عملاء بعد",
+          description: "أنشئ أول عميل عبر «+ عميل جديد».",
         }}
       />
 
@@ -103,7 +93,7 @@ export default async function UsersPage({
           className="mt-4 flex items-center justify-between gap-2 text-sm"
         >
           <Link
-            href={`/users?page=${Math.max(1, page - 1)}`}
+            href={`/clients?page=${Math.max(1, page - 1)}`}
             aria-disabled={page === 1}
             className={
               "rounded border border-gray-300 px-3 py-1.5 dark:border-gray-700 " +
@@ -118,7 +108,7 @@ export default async function UsersPage({
             {page} / {totalPages}
           </span>
           <Link
-            href={`/users?page=${Math.min(totalPages, page + 1)}`}
+            href={`/clients?page=${Math.min(totalPages, page + 1)}`}
             aria-disabled={page === totalPages}
             className={
               "rounded border border-gray-300 px-3 py-1.5 dark:border-gray-700 " +

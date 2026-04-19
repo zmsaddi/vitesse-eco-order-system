@@ -2,32 +2,24 @@ import { NextResponse } from "next/server";
 import { withRead, withTxInRoute } from "@/db/client";
 import { requireRole } from "@/lib/session-claims";
 import { apiError, ValidationError } from "@/lib/api-errors";
-import { createUser, listUsersPaginated } from "@/modules/users/service";
-import { CreateUserInput } from "@/modules/users/dto";
+import { createClient, listActiveClients } from "@/modules/clients/service";
+import { CreateClientInput } from "@/modules/clients/dto";
 
-// GET /api/v1/users — paginated list. PM/GM only.
-// Phase 2b: ?limit + ?offset + ?includeInactive=true.
-//
-// Response: { users, total, limit, offset }.
+// GET + POST /api/v1/clients (pm/gm/manager/seller per permissions matrix — D-12).
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   try {
-    await requireRole(request, ["pm", "gm"]);
+    await requireRole(request, ["pm", "gm", "manager", "seller"]);
     const url = new URL(request.url);
     const limit = url.searchParams.has("limit") ? Number(url.searchParams.get("limit")) : undefined;
     const offset = url.searchParams.has("offset") ? Number(url.searchParams.get("offset")) : undefined;
-    const includeInactive = url.searchParams.get("includeInactive") === "true";
 
-    const result = await withRead(undefined, (db) =>
-      listUsersPaginated(db, { limit, offset, includeInactive }),
-    );
+    const result = await withRead(undefined, (db) => listActiveClients(db, { limit, offset }));
     return NextResponse.json({
-      users: result.rows,
+      clients: result.rows,
       total: result.total,
-      limit: result.limit,
-      offset: result.offset,
     });
   } catch (err) {
     return apiError(err);
@@ -36,20 +28,20 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const claims = await requireRole(request, ["pm", "gm"]);
+    const claims = await requireRole(request, ["pm", "gm", "manager", "seller"]);
 
     const body = await request.json().catch(() => null);
-    const parsed = CreateUserInput.safeParse(body);
+    const parsed = CreateClientInput.safeParse(body);
     if (!parsed.success) {
       throw new ValidationError("البيانات المدخلة غير صحيحة. راجع الحقول المميَّزة", {
         issues: parsed.error.flatten().fieldErrors,
       });
     }
 
-    const user = await withTxInRoute(undefined, (tx) =>
-      createUser(tx, parsed.data, claims.username),
+    const client = await withTxInRoute(undefined, (tx) =>
+      createClient(tx, parsed.data, claims.username),
     );
-    return NextResponse.json({ user }, { status: 201 });
+    return NextResponse.json({ client }, { status: 201 });
   } catch (err) {
     return apiError(err);
   }
