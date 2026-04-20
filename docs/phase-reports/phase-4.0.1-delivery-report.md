@@ -2,6 +2,15 @@
 
 > **Template**: D-78 §5 (13-section).
 > **Type**: Required corrective tranche for Phase 4.0 — closes the 4 gaps flagged by external review. Does NOT authorize a full pilot (no invoice PDF / treasury / settlements yet).
+> **Status**: Superseded by **Phase 4.0.2** (accounting-date correction). See [`phase-4.0.2-delivery-report.md`](./phase-4.0.2-delivery-report.md).
+
+---
+
+## 0. Errata (added 2026-04-20 after external review)
+
+One additional critical finding after 4.0.1 committed: `payments.date` and `bonuses.date` were still being stamped with `deliveries.date` (which mirrors `orders.date`), not the confirm moment. Since 00_DECISIONS §treasury + 10_Calculation_Formulas §bonuses + BR-31 all key accounting periods off those two columns, an order opened on day X and delivered on day Y was booking revenue + commission into period X instead of period Y — a real accounting bug that the Phase 4.0 + 4.0.1 tests didn't catch because they happened to set `orders.date` = `today`.
+
+Fixed in Phase 4.0.2. See that report.
 
 ---
 

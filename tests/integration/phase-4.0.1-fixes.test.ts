@@ -12,7 +12,6 @@ import { HAS_DB, TEST_DATABASE_URL, applyMigrations, resetSchema } from "./setup
 
 describe.skipIf(!HAS_DB)("Phase 4.0.1 corrective fixes (requires TEST_DATABASE_URL)", () => {
   let adminUserId: number;
-  let pmUserId: number;
   let sellerId: number;
   let driverId: number;
   let driver2Id: number;
@@ -48,7 +47,6 @@ describe.skipIf(!HAS_DB)("Phase 4.0.1 corrective fixes (requires TEST_DATABASE_U
         db.select().from(users).where(eq(users.username, "admin")).limit(1),
       )
     )[0].id;
-    pmUserId = adminUserId; // admin role=pm by default after /api/init.
 
     const hash = await hashPassword("test-pass-4.0.1");
     [sellerId, driverId, driver2Id] = await withTxInRoute(undefined, async (tx) => {

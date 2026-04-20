@@ -183,6 +183,12 @@ export async function confirmDelivery(
     ? { id: assign.driverUserId, username: assign.driverUsername }
     : await resolveDriver(tx, assign.driverUserId);
   const now = new Date();
+  // D-accounting: payments.date + bonuses.date must book into the PERIOD of the
+  // actual confirm moment, not the order's creation date. 00_DECISIONS §treasury
+  // and 10_Calculation_Formulas §bonuses (BR-31) both key period aggregates
+  // off these columns, so a 10-Jan order confirmed on 15-Jan must land in the
+  // 15-Jan period.
+  const confirmDate = formatParisIsoDate(now);
 
   // 1. Delivery → تم التوصيل.
   await tx
@@ -201,7 +207,7 @@ export async function confirmDelivery(
     .update(orders)
     .set({
       status: "مؤكد",
-      deliveryDate: formatParisIsoDate(now),
+      deliveryDate: confirmDate,
       confirmationDate: now,
       updatedBy: claims.username,
       updatedAt: now,
@@ -226,7 +232,7 @@ export async function confirmDelivery(
       orderId: order.id,
       clientId: order.client_id,
       clientNameCached: client?.name ?? "",
-      date: current.date,
+      date: confirmDate,
       type: "collection",
       paymentMethod,
       amount: input.paidAmount.toFixed(2),
@@ -252,11 +258,12 @@ export async function confirmDelivery(
       .where(eq(orders.id, order.id));
   }
 
-  // 5. Bonuses (13_Commission_Rules).
+  // 5. Bonuses (13_Commission_Rules). BR-31 + 10_Calculation_Formulas §bonuses:
+  // bonuses.date is the confirm-moment period, not the order date.
   const bonusResult = await computeBonusesOnConfirm(tx, {
     orderId: order.id,
     deliveryId: id,
-    date: current.date,
+    date: confirmDate,
     sellerUsername: order.created_by,
     driverUserId: driver.id,
     driverUsername: driver.username,
