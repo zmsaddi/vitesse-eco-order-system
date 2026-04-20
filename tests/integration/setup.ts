@@ -63,6 +63,8 @@ export const D35_SEED_SETTINGS: ReadonlyArray<{ key: string; value: string }> = 
   { key: "shop_name", value: "VITESSE ECO SAS" },
   { key: "shop_legal_form", value: "SAS" },
   { key: "shop_siret", value: "12345678901234" },
+  { key: "shop_siren", value: "123456789" },
+  { key: "shop_ape", value: "4618Z" },
   { key: "shop_vat_number", value: "FR12345678901" },
   { key: "shop_address", value: "123 Rue de la Paix" },
   { key: "shop_city", value: "86000 Poitiers" },
@@ -71,6 +73,8 @@ export const D35_SEED_SETTINGS: ReadonlyArray<{ key: string; value: string }> = 
   { key: "shop_rcs_number", value: "RCS Poitiers 123 456 789" },
   { key: "shop_iban", value: "FR7610057190010000000000001" },
   { key: "shop_bic", value: "CMBRFR2BARK" },
+  { key: "shop_penalty_rate_annual", value: "10.5" },
+  { key: "shop_recovery_fee_eur", value: "40" },
   { key: "vat_rate", value: "20" },
 ];
 

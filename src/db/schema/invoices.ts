@@ -2,6 +2,7 @@ import {
   boolean,
   check,
   integer,
+  jsonb,
   numeric,
   pgTable,
   serial,
@@ -44,6 +45,16 @@ export const invoices = pgTable(
     totalHtFrozen: numeric("total_ht_frozen", { precision: 19, scale: 2 }).notNull(),
     tvaAmountFrozen: numeric("tva_amount_frozen", { precision: 19, scale: 2 }).notNull(),
     vatRateFrozen: numeric("vat_rate_frozen", { precision: 5, scale: 2 }).notNull(),
+
+    // Phase 4.1.1 — frozen vendor + payments snapshots for PDF inaltérabilité
+    // (00_DECISIONS §PDF render = frozen-only). Populated at issue time from
+    // settings + payments table; never read live thereafter.
+    vendorSnapshot: jsonb("vendor_snapshot")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    paymentsHistory: jsonb("payments_history")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
 
     // Hash chain (D-37)
     prevHash: text("prev_hash"),

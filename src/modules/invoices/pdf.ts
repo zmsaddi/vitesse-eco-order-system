@@ -1,36 +1,23 @@
 import PDFDocument from "pdfkit";
-import type { InvoiceDetailDto, InvoiceLineDto } from "./dto";
+import type {
+  InvoiceDetailDto,
+  InvoiceLineDto,
+  PaymentsHistory,
+  VendorSnapshot,
+} from "./dto";
 
-// Phase 4.1 — minimal French invoice PDF renderer.
+// Phase 4.1.1 — minimal French invoice PDF renderer, frozen-only inputs.
 //
-// Input is the frozen invoice + frozen lines as returned by getInvoiceById,
-// plus the subset of D-35 settings captured by the caller. We deliberately do
-// NOT re-read live tables here: the PDF is an export of the frozen snapshot,
-// not a recomputation. BR-66: French-language only.
+// Contract: the renderer reads ONLY the frozen invoice row (vendor block,
+// totals, client, payments history) + invoice_lines. No live `settings`
+// read, no live `payments` read. This is what 00_DECISIONS §PDF-render
+// actually requires ("render يقرأ فقط من frozen columns وinvoice_lines"):
+// once an invoice is issued, mutating `settings` cannot alter the PDF the
+// authorities receive.
 //
-// No font files are shipped — we use PDFKit's built-in Helvetica which covers
-// French accents via WinAnsi. Cairo / Arabic rendering is out of scope for
-// Phase 4.1 (the invoice is French-only per BR-66 and 22_Print_Export.md).
-
-export type InvoiceSettings = {
-  shopName: string;
-  shopLegalForm: string;
-  shopSiret: string;
-  shopSiren: string;
-  shopApe: string;
-  shopVatNumber: string;
-  shopAddress: string;
-  shopCity: string;
-  shopEmail: string;
-  shopWebsite: string;
-  shopIban: string;
-  shopBic: string;
-  shopCapitalSocial: string;
-  shopRcsCity: string;
-  shopRcsNumber: string;
-  shopPenaltyRateAnnual: string;
-  shopRecoveryFeeEur: string;
-};
+// No font files are shipped — we use PDFKit's built-in Helvetica which
+// covers French accents via WinAnsi. Cairo / Arabic rendering is out of
+// scope for Phase 4.1 (the invoice is French-only per BR-66).
 
 const EUR = (s: string): string => {
   const n = Number(s);
@@ -45,22 +32,22 @@ const QTY = (s: string): string => {
 
 function drawVendorBlock(
   doc: PDFKit.PDFDocument,
-  s: InvoiceSettings,
+  v: VendorSnapshot,
   x: number,
   y: number,
 ): void {
-  doc.font("Helvetica-Bold").fontSize(11).text(s.shopName, x, y);
+  doc.font("Helvetica-Bold").fontSize(11).text(v.shopName, x, y);
   doc.font("Helvetica").fontSize(9);
   const lines = [
-    `${s.shopLegalForm} - Capital social ${s.shopCapitalSocial} €`,
-    s.shopAddress,
-    s.shopCity,
-    `SIRET : ${s.shopSiret}${s.shopSiren ? `  |  SIREN : ${s.shopSiren}` : ""}`,
-    `N° TVA : ${s.shopVatNumber}${s.shopApe ? `  |  APE : ${s.shopApe}` : ""}`,
-    `${s.shopRcsNumber}`,
-    s.shopEmail,
-    s.shopWebsite,
-  ].filter(Boolean);
+    `${v.shopLegalForm} - Capital social ${v.shopCapitalSocial} €`,
+    v.shopAddress,
+    v.shopCity,
+    `SIRET : ${v.shopSiret}${v.shopSiren ? `  |  SIREN : ${v.shopSiren}` : ""}`,
+    `N° TVA : ${v.shopVatNumber}${v.shopApe ? `  |  APE : ${v.shopApe}` : ""}`,
+    v.shopRcsNumber,
+    v.shopEmail,
+    v.shopWebsite,
+  ].filter((l) => l && l.trim().length > 0);
   for (const line of lines) {
     doc.text(line, x, doc.y);
   }
@@ -150,17 +137,53 @@ function drawTotalsBlock(
   return startY + 50;
 }
 
+function drawPaymentHistoryBlock(
+  doc: PDFKit.PDFDocument,
+  paymentsHistory: PaymentsHistory,
+  startY: number,
+): number {
+  if (paymentsHistory.length === 0) return startY;
+  doc.font("Helvetica-Bold").fontSize(9).text("Historique des règlements", 50, startY);
+  doc.font("Helvetica-Bold").fontSize(9);
+  const left = 50;
+  const cols = {
+    date: left,
+    method: left + 120,
+    type: left + 240,
+    amount: left + 420,
+  };
+  let y = startY + 14;
+  doc.text("Date", cols.date, y);
+  doc.text("Mode", cols.method, y);
+  doc.text("Type", cols.type, y);
+  doc.text("Montant", cols.amount, y);
+  doc
+    .moveTo(left, y + 12)
+    .lineTo(540, y + 12)
+    .stroke();
+  y += 18;
+  doc.font("Helvetica").fontSize(9);
+  for (const p of paymentsHistory) {
+    doc.text(p.date, cols.date, y);
+    doc.text(p.paymentMethod, cols.method, y);
+    doc.text(p.type, cols.type, y);
+    doc.text(EUR(p.amount), cols.amount, y);
+    y += 14;
+  }
+  return y + 6;
+}
+
 function drawLegalFooter(
   doc: PDFKit.PDFDocument,
-  s: InvoiceSettings,
+  v: VendorSnapshot,
   startY: number,
 ): void {
   doc.font("Helvetica-Bold").fontSize(9).text("Conditions de paiement", 50, startY);
   doc.font("Helvetica").fontSize(8);
   const lines = [
     "Conditions d'escompte : aucun.",
-    `Pénalités de retard : ${s.shopPenaltyRateAnnual}% annuel (minimum BCE + 10 points).`,
-    `Indemnité forfaitaire de recouvrement : ${s.shopRecoveryFeeEur} € (C. com. L441-10 II).`,
+    `Pénalités de retard : ${v.shopPenaltyRateAnnual}% annuel (minimum BCE + 10 points).`,
+    `Indemnité forfaitaire de recouvrement : ${v.shopRecoveryFeeEur} € (C. com. L441-10 II).`,
   ];
   for (const line of lines) {
     doc.text(line, 50, doc.y);
@@ -168,14 +191,15 @@ function drawLegalFooter(
   doc.moveDown(0.5);
   doc.font("Helvetica-Bold").fontSize(9).text("Coordonnées bancaires", 50, doc.y);
   doc.font("Helvetica").fontSize(8);
-  doc.text(`IBAN : ${s.shopIban}`, 50, doc.y);
-  doc.text(`BIC : ${s.shopBic}`, 50, doc.y);
+  doc.text(`IBAN : ${v.shopIban}`, 50, doc.y);
+  doc.text(`BIC : ${v.shopBic}`, 50, doc.y);
 }
 
-export function renderInvoicePdf(
-  detail: InvoiceDetailDto,
-  s: InvoiceSettings,
-): Promise<Buffer> {
+/**
+ * Render the invoice detail (header + frozen vendor + frozen payments + lines)
+ * into a PDF buffer. Pure function of the detail DTO.
+ */
+export function renderInvoicePdf(detail: InvoiceDetailDto): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 50 });
     const chunks: Buffer[] = [];
@@ -184,32 +208,36 @@ export function renderInvoicePdf(
     doc.on("error", reject);
 
     const inv = detail.invoice;
+    const v = inv.vendorSnapshot;
 
     doc.font("Helvetica-Bold").fontSize(20).text("FACTURE", 50, 50);
     doc.font("Helvetica").fontSize(11);
     doc.text(`N° ${inv.refCode}`, 50, 78);
     doc.text(`Date de facturation : ${inv.date}`, 50, 92);
-    doc.text(
-      `Date de livraison : ${inv.deliveryDate ?? "—"}`,
-      50,
-      106,
-    );
+    doc.text(`Date de livraison : ${inv.deliveryDate ?? "—"}`, 50, 106);
     doc.text(`Mode de règlement : ${inv.paymentMethod}`, 50, 120);
 
-    // Vendor (right side).
-    drawVendorBlock(doc, s, 320, 50);
+    // Vendor (right side, frozen).
+    drawVendorBlock(doc, v, 320, 50);
 
-    // Client (below header, left column).
+    // Client (below header, left column, frozen).
     drawClientBlock(doc, inv, 50, 160);
 
-    // Items table starts after the taller of the two columns.
+    // Items table.
     const tableEndY = drawItemsTable(doc, detail.lines, 240);
 
     // Totals.
     const totalsEndY = drawTotalsBlock(doc, inv, tableEndY + 6);
 
-    // Legal footer starts ~30pt below totals.
-    drawLegalFooter(doc, s, totalsEndY + 24);
+    // Payment history (frozen) — shown between totals and legal block when present.
+    const paymentsEndY = drawPaymentHistoryBlock(
+      doc,
+      inv.paymentsHistory,
+      totalsEndY + 16,
+    );
+
+    // Legal footer (frozen).
+    drawLegalFooter(doc, v, paymentsEndY + 16);
 
     // Tiny meta footer at page bottom.
     doc.font("Helvetica").fontSize(7);

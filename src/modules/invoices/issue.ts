@@ -6,7 +6,6 @@ import {
   invoices,
   orderItems,
   orders,
-  settings,
   users,
 } from "@/db/schema";
 import { BusinessRuleError } from "@/lib/api-errors";
@@ -16,6 +15,7 @@ import {
   HASH_CHAIN_KEYS,
 } from "@/lib/hash-chain";
 import { generateInvoiceRefCode } from "./ref-code";
+import { readIssueSettings, readPaymentsHistory } from "./snapshots";
 
 // Phase 4.1 — issue an invoice inside an existing confirm-delivery transaction.
 //
@@ -44,34 +44,6 @@ export type IssuedInvoice = { id: number; refCode: string };
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
-}
-
-async function readVatRate(tx: DbTx): Promise<number> {
-  const rows = await tx
-    .select({ value: settings.value })
-    .from(settings)
-    .where(eq(settings.key, "vat_rate"))
-    .limit(1);
-  if (rows.length === 0) {
-    throw new BusinessRuleError(
-      "إعداد vat_rate مفقود.",
-      "D35_READINESS_INCOMPLETE",
-      412,
-      "settings.vat_rate missing at invoice issue — D-35 gate should have caught this",
-      { missing: ["vat_rate"] },
-    );
-  }
-  const n = Number(rows[0].value);
-  if (!Number.isFinite(n) || n < 0) {
-    throw new BusinessRuleError(
-      `قيمة vat_rate غير صالحة (${rows[0].value}).`,
-      "D35_READINESS_INCOMPLETE",
-      412,
-      `settings.vat_rate is not a non-negative number: ${rows[0].value}`,
-      { key: "vat_rate", raw: rows[0].value },
-    );
-  }
-  return n;
 }
 
 async function readOrderHeader(tx: DbTx, orderId: number) {
@@ -148,7 +120,7 @@ export async function issueInvoiceInTx(
   tx: DbTx,
   args: IssueInvoiceArgs,
 ): Promise<IssuedInvoice> {
-  const vatRate = await readVatRate(tx);
+  const { vatRate, vendorSnapshot } = await readIssueSettings(tx);
   const order = await readOrderHeader(tx, args.orderId);
   const client = await readClientSnapshot(tx, order.clientId);
   const sellerName = await readUserName(tx, { username: args.sellerUsername });
@@ -209,6 +181,11 @@ export async function issueInvoiceInTx(
   const totalVat = round2((totalTtc * vatRate) / (100 + vatRate));
   const totalHt = round2(totalTtc - totalVat);
 
+  // Phase 4.1.1 — freeze payment history for the parent order at issue time.
+  // confirm-delivery has already inserted the just-collected row (if any), so
+  // this captures both any pre-existing advances AND today's collection.
+  const paymentsHistory = await readPaymentsHistory(tx, args.orderId);
+
   const refCode = await generateInvoiceRefCode(tx);
 
   const canonical = canonicalJSON({
@@ -224,12 +201,14 @@ export async function issueInvoiceInTx(
     lineCount: lineFrozen.length,
     orderId: args.orderId,
     paymentMethod: order.paymentMethod,
+    paymentsCount: paymentsHistory.length,
     refCode,
     sellerName,
     totalHt: totalHt.toFixed(2),
     totalTtc: totalTtc.toFixed(2),
     tvaAmount: totalVat.toFixed(2),
     vatRate: vatRate.toFixed(2),
+    vendorSiret: vendorSnapshot.shopSiret,
   });
   const { prevHash, rowHash } = await computeHashChainLink(
     tx,
@@ -257,6 +236,8 @@ export async function issueInvoiceInTx(
       totalHtFrozen: totalHt.toFixed(2),
       tvaAmountFrozen: totalVat.toFixed(2),
       vatRateFrozen: vatRate.toFixed(2),
+      vendorSnapshot,
+      paymentsHistory,
       prevHash,
       rowHash,
       status: "مؤكد",

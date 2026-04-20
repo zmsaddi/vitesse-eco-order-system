@@ -5,6 +5,43 @@ import { z } from "zod";
 // Every persisted column is frozen at issue time (D-30 anti-fraude): totals,
 // VAT rate, client/seller/driver names, line snapshots, etc. Nothing in this
 // DTO is ever recomputed from live tables after issue.
+//
+// Phase 4.1.1 — two JSONB columns carry the rest of the frozen inputs the PDF
+// renderer needs (vendor legal block + payment history at issue time). The PDF
+// reads ONLY from the invoice row + invoice_lines — no live settings, no live
+// payments query at render time.
+
+export const VendorSnapshot = z.object({
+  shopName: z.string().default(""),
+  shopLegalForm: z.string().default(""),
+  shopSiret: z.string().default(""),
+  shopSiren: z.string().default(""),
+  shopApe: z.string().default(""),
+  shopVatNumber: z.string().default(""),
+  shopAddress: z.string().default(""),
+  shopCity: z.string().default(""),
+  shopEmail: z.string().default(""),
+  shopWebsite: z.string().default(""),
+  shopIban: z.string().default(""),
+  shopBic: z.string().default(""),
+  shopCapitalSocial: z.string().default(""),
+  shopRcsCity: z.string().default(""),
+  shopRcsNumber: z.string().default(""),
+  shopPenaltyRateAnnual: z.string().default(""),
+  shopRecoveryFeeEur: z.string().default(""),
+});
+export type VendorSnapshot = z.infer<typeof VendorSnapshot>;
+
+export const PaymentHistoryEntry = z.object({
+  date: z.string(), // YYYY-MM-DD
+  amount: z.string(), // numeric(19,2)
+  paymentMethod: z.string(),
+  type: z.string(), // collection | advance | refund
+});
+export type PaymentHistoryEntry = z.infer<typeof PaymentHistoryEntry>;
+
+export const PaymentsHistory = z.array(PaymentHistoryEntry);
+export type PaymentsHistory = z.infer<typeof PaymentsHistory>;
 
 export const InvoiceLineDto = z.object({
   id: z.number().int().positive(),
@@ -42,6 +79,8 @@ export const InvoiceDto = z.object({
   vatRateFrozen: z.string(),
   status: z.string(),
   createdAt: z.string(),
+  vendorSnapshot: VendorSnapshot,
+  paymentsHistory: PaymentsHistory,
 });
 export type InvoiceDto = z.infer<typeof InvoiceDto>;
 

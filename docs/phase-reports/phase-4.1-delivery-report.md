@@ -2,6 +2,19 @@
 
 > **Template**: D-78 §5 (13-section).
 > **Type**: First functional tranche inside Phase 4 beyond deliveries. Closes invoice core ONLY — treasury, settlements, avoir, cancel-as-debt, notifications are explicitly out of scope and remain blocking for the full pilot.
+> **Status**: Superseded by **Phase 4.1.1** (D-35 gate completeness + PDF inaltérabilité + Payment history). See [`phase-4.1.1-delivery-report.md`](./phase-4.1.1-delivery-report.md).
+
+---
+
+## 0. Errata (added 2026-04-20 after external review)
+
+Three findings surfaced after 9a145aa committed:
+
+1. **CRITICAL — D-35 gate incomplete.** `D35_REQUIRED_SETTINGS` in [`d35-gate.ts`](../../src/modules/invoices/d35-gate.ts) only checked 12 keys; canonical spec (00_DECISIONS §D-35 + 22_Print_Export §vendor) requires four more: `shop_siren`, `shop_ape`, `shop_penalty_rate_annual`, `shop_recovery_fee_eur`. Missing any of those from `settings` would silently produce an invoice whose PDF rendered placeholder or empty French legal mentions.
+2. **HIGH — PDF not actually immutable.** The `/pdf` route read vendor legal data from `settings` live at render time. Mutating `shop_name` or `shop_iban` or `shop_penalty_rate_annual` after an invoice was issued would change the PDF for that already-issued invoice — directly contradicting 00_DECISIONS §PDF render ("reads only from frozen columns and invoice_lines") and the anti-fraude principle.
+3. **MEDIUM — Payment history block missing from PDF.** Spec (22_Print_Export §historique des règlements) requires a Payment history section. With Phase 4.0 landing real `payments` rows, this became a real code/contract mismatch, not a theoretical gap.
+
+All three are addressed in Phase 4.1.1. Read this report and the 4.1.1 report together.
 
 ---
 

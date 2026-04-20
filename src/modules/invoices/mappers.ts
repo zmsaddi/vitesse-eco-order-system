@@ -1,10 +1,20 @@
 import type { invoices, invoiceLines } from "@/db/schema";
-import type { InvoiceDto, InvoiceLineDto } from "./dto";
+import {
+  PaymentsHistory,
+  VendorSnapshot,
+  type InvoiceDto,
+  type InvoiceLineDto,
+} from "./dto";
 
 type InvoiceRow = typeof invoices.$inferSelect;
 type InvoiceLineRow = typeof invoiceLines.$inferSelect;
 
 export function invoiceRowToDto(row: InvoiceRow): InvoiceDto {
+  // JSONB columns come back as `unknown` via drizzle; parse via Zod so we
+  // get safe defaults (empty vendor snapshot / empty payments array) rather
+  // than letting NULL/missing values leak into PDF rendering.
+  const vendor = VendorSnapshot.parse(row.vendorSnapshot ?? {});
+  const payments = PaymentsHistory.parse(row.paymentsHistory ?? []);
   return {
     id: row.id,
     refCode: row.refCode,
@@ -26,6 +36,8 @@ export function invoiceRowToDto(row: InvoiceRow): InvoiceDto {
     vatRateFrozen: row.vatRateFrozen,
     status: row.status,
     createdAt: row.createdAt.toISOString(),
+    vendorSnapshot: vendor,
+    paymentsHistory: payments,
   };
 }
 

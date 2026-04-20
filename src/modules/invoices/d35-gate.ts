@@ -20,6 +20,8 @@ export const D35_REQUIRED_SETTINGS: readonly string[] = [
   "shop_name",
   "shop_legal_form",
   "shop_siret",
+  "shop_siren",
+  "shop_ape",
   "shop_vat_number",
   "shop_address",
   "shop_city",
@@ -28,6 +30,8 @@ export const D35_REQUIRED_SETTINGS: readonly string[] = [
   "shop_rcs_number",
   "shop_iban",
   "shop_bic",
+  "shop_penalty_rate_annual",
+  "shop_recovery_fee_eur",
   "vat_rate",
 ];
 
