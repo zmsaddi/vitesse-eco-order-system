@@ -43,6 +43,13 @@
       "when": 1776651842250,
       "tag": "0005_expenses_reversal_of",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1776672465468,
+      "tag": "0006_order_items_discount",
+      "breakpoints": true
     }
   ]
 }

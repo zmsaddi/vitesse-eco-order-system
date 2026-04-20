@@ -6,6 +6,7 @@ type OrderRow = typeof orders.$inferSelect;
 type OrderItemRow = typeof orderItems.$inferSelect;
 
 export function orderItemRowToDto(row: OrderItemRow): OrderItemDto {
+  const discountType = (row.discountType ?? null) as "percent" | "fixed" | null;
   return {
     id: row.id,
     orderId: row.orderId,
@@ -13,11 +14,16 @@ export function orderItemRowToDto(row: OrderItemRow): OrderItemDto {
     productNameCached: row.productNameCached,
     category: row.category ?? "",
     quantity: toNumber(row.quantity),
+    recommendedPrice: toNumber(row.recommendedPrice),
     unitPrice: toNumber(row.unitPrice),
     costPrice: toNumber(row.costPrice),
+    discountType,
+    discountValue: row.discountValue != null ? toNumber(row.discountValue) : null,
     lineTotal: toNumber(row.lineTotal),
     isGift: row.isGift,
     vin: row.vin ?? "",
+    commissionRuleSnapshot:
+      (row.commissionRuleSnapshot as Record<string, unknown> | null) ?? {},
   };
 }
 

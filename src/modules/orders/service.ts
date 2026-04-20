@@ -5,10 +5,8 @@ import {
   clients,
   orderItems,
   orders,
-  products,
 } from "@/db/schema";
 import {
-  BusinessRuleError,
   ConflictError,
   NotFoundError,
 } from "@/lib/api-errors";
@@ -20,6 +18,7 @@ import {
 } from "@/lib/hash-chain";
 import { orderRowToDto } from "./mappers";
 import { enforceCancelPermission, enforceOrderVisibility, type OrderClaims } from "./permissions";
+import { loadPricingContext, processOrderItem } from "./pricing";
 import { generateOrderRefCode } from "./ref-code";
 import type {
   CancelOrderInput,
@@ -57,6 +56,30 @@ export async function getOrderById(
   return orderRowToDto(orderRows[0], items);
 }
 
+/**
+ * Internal read used by mutation echoes (post-create/transition/cancel). The
+ * role-based visibility check applies to external GET requests; once the caller
+ * has already passed their mutation's permission gate, echoing the row back is
+ * safe even if their role wouldn't satisfy the broader GET visibility rules
+ * (e.g. stock_keeper completing a state transition).
+ */
+async function fetchOrderInternal(
+  db: DbHandle | DbTx,
+  id: number,
+): Promise<OrderDto> {
+  const orderRows = await db
+    .select()
+    .from(orders)
+    .where(and(eq(orders.id, id), isNull(orders.deletedAt)))
+    .limit(1);
+  if (orderRows.length === 0) throw new NotFoundError(`الطلب رقم ${id}`);
+  const items = await db
+    .select()
+    .from(orderItems)
+    .where(and(eq(orderItems.orderId, id), isNull(orderItems.deletedAt)));
+  return orderRowToDto(orderRows[0], items);
+}
+
 export async function createOrder(
   tx: DbTx,
   input: CreateOrderInput,
@@ -72,57 +95,15 @@ export async function createOrder(
   }
   const client = clientRows[0];
 
+  const ctx = await loadPricingContext(tx, { role: claims.role, username: claims.username });
+
+  // Per-item validation + discount + VIN + gift-pool + commission snapshot + stock decrement.
+  const processed: Awaited<ReturnType<typeof processOrderItem>>[] = [];
   let totalAmount = 0;
-  const itemsToInsert: Array<{
-    productId: number;
-    productNameCached: string;
-    category: string;
-    quantity: string;
-    unitPrice: string;
-    costPrice: string;
-    lineTotal: string;
-    isGift: boolean;
-    vin: string;
-  }> = [];
   for (const item of input.items) {
-    const prodRows = await tx
-      .select()
-      .from(products)
-      .where(eq(products.id, item.productId))
-      .limit(1);
-    if (prodRows.length === 0 || !prodRows[0].active) {
-      throw new BusinessRuleError(
-        `المنتج رقم ${item.productId} غير موجود أو معطَّل.`,
-        "PRODUCT_UNAVAILABLE",
-        400,
-        undefined,
-        { productId: item.productId },
-      );
-    }
-    const product = prodRows[0];
-    const costPrice = Number(product.buyPrice);
-    if (!item.isGift && item.unitPrice < costPrice) {
-      throw new BusinessRuleError(
-        "سعر البيع أقل من سعر الشراء — غير مقبول.",
-        "PRICE_BELOW_COST",
-        400,
-        undefined,
-        { productId: item.productId, unitPrice: item.unitPrice, costPrice },
-      );
-    }
-    const lineTotal = item.isGift ? 0 : item.quantity * item.unitPrice;
-    totalAmount += lineTotal;
-    itemsToInsert.push({
-      productId: item.productId,
-      productNameCached: product.name,
-      category: product.category,
-      quantity: item.quantity.toFixed(2),
-      unitPrice: item.isGift ? "0.00" : item.unitPrice.toFixed(2),
-      costPrice: costPrice.toFixed(2),
-      lineTotal: lineTotal.toFixed(2),
-      isGift: item.isGift,
-      vin: item.vin,
-    });
+    const row = await processOrderItem(tx, ctx, item);
+    processed.push(row);
+    totalAmount += Number(row.lineTotal);
   }
 
   const refCode = await generateOrderRefCode(tx);
@@ -147,18 +128,21 @@ export async function createOrder(
   const orderId = orderInserted[0].id;
 
   await tx.insert(orderItems).values(
-    itemsToInsert.map((it) => ({
+    processed.map((it) => ({
       orderId,
       productId: it.productId,
       productNameCached: it.productNameCached,
       category: it.category,
       quantity: it.quantity,
+      recommendedPrice: it.recommendedPrice,
       unitPrice: it.unitPrice,
       costPrice: it.costPrice,
+      discountType: it.discountType,
+      discountValue: it.discountValue,
       lineTotal: it.lineTotal,
       isGift: it.isGift,
       vin: it.vin,
-      commissionRuleSnapshot: {},
+      commissionRuleSnapshot: it.commissionRuleSnapshot,
     })),
   );
 
@@ -173,17 +157,17 @@ export async function createOrder(
       clientId: input.clientId,
       itemCount: input.items.length,
       totalAmount,
+      hasGifts: processed.some((r) => r.isGift),
     },
   });
 
-  return getOrderById(tx as unknown as DbHandle, orderId, claims);
+  return fetchOrderInternal(tx, orderId);
 }
 
-export async function startPreparation(
+async function lockOrder(
   tx: DbTx,
   id: number,
-  claims: OrderClaims,
-): Promise<OrderDto> {
+): Promise<{ id: number; status: string; created_by: string }> {
   const lockRes = await tx.execute(
     sql`SELECT id, status, created_by FROM orders WHERE id = ${id} AND deleted_at IS NULL FOR UPDATE`,
   );
@@ -191,18 +175,28 @@ export async function startPreparation(
     rows?: Array<{ id: number; status: string; created_by: string }>;
   }).rows ?? [];
   if (rows.length === 0) throw new NotFoundError(`الطلب رقم ${id}`);
-  const current = rows[0];
-  if (current.status !== "محجوز") {
+  return rows[0];
+}
+
+async function transitionStatus(
+  tx: DbTx,
+  id: number,
+  from: string,
+  to: string,
+  claims: OrderClaims,
+): Promise<OrderDto> {
+  const current = await lockOrder(tx, id);
+  if (current.status !== from) {
     throw new ConflictError(
-      `لا يمكن بدء التحضير: الحالة الحالية "${current.status}".`,
+      `لا يمكن الانتقال إلى "${to}": الحالة الحالية "${current.status}".`,
       "INVALID_STATE_TRANSITION",
-      { from: current.status, to: "قيد التحضير" },
+      { from: current.status, to, expectedFrom: from },
     );
   }
 
   await tx
     .update(orders)
-    .set({ status: "قيد التحضير", updatedBy: claims.username, updatedAt: new Date() })
+    .set({ status: to, updatedBy: claims.username, updatedAt: new Date() })
     .where(eq(orders.id, id));
 
   await logActivity(tx, {
@@ -211,10 +205,26 @@ export async function startPreparation(
     entityId: id,
     userId: claims.userId,
     username: claims.username,
-    details: { transition: "محجوز → قيد التحضير" },
+    details: { transition: `${from} → ${to}` },
   });
 
-  return getOrderById(tx as unknown as DbHandle, id, claims);
+  return fetchOrderInternal(tx, id);
+}
+
+export async function startPreparation(
+  tx: DbTx,
+  id: number,
+  claims: OrderClaims,
+): Promise<OrderDto> {
+  return transitionStatus(tx, id, "محجوز", "قيد التحضير", claims);
+}
+
+export async function markReady(
+  tx: DbTx,
+  id: number,
+  claims: OrderClaims,
+): Promise<OrderDto> {
+  return transitionStatus(tx, id, "قيد التحضير", "جاهز", claims);
 }
 
 export async function cancelOrder(
@@ -223,14 +233,7 @@ export async function cancelOrder(
   input: CancelOrderInput,
   claims: OrderClaims,
 ): Promise<OrderDto> {
-  const lockRes = await tx.execute(
-    sql`SELECT id, status, created_by FROM orders WHERE id = ${id} AND deleted_at IS NULL FOR UPDATE`,
-  );
-  const rows = (lockRes as unknown as {
-    rows?: Array<{ id: number; status: string; created_by: string }>;
-  }).rows ?? [];
-  if (rows.length === 0) throw new NotFoundError(`الطلب رقم ${id}`);
-  const current = rows[0];
+  const current = await lockOrder(tx, id);
   if (current.status === "ملغي") {
     throw new ConflictError(
       "الطلب ملغى مسبقاً.",
@@ -307,7 +310,7 @@ export async function cancelOrder(
     },
   });
 
-  return getOrderById(tx as unknown as DbHandle, id, claims);
+  return fetchOrderInternal(tx, id);
 }
 
 // Re-export for tests that used to import from this module.

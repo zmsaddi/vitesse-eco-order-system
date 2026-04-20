@@ -11,11 +11,15 @@ export const OrderItemDto = z.object({
   productNameCached: z.string(),
   category: z.string().default(""),
   quantity: z.number(),
+  recommendedPrice: z.number(),
   unitPrice: z.number(),
   costPrice: z.number(),
+  discountType: z.enum(["percent", "fixed"]).nullable(),
+  discountValue: z.number().nullable(),
   lineTotal: z.number(),
   isGift: z.boolean(),
   vin: z.string().default(""),
+  commissionRuleSnapshot: z.record(z.string(), z.unknown()),
 });
 export type OrderItemDto = z.infer<typeof OrderItemDto>;
 
@@ -39,14 +43,33 @@ export const OrderDto = z.object({
 });
 export type OrderDto = z.infer<typeof OrderDto>;
 
-// Create input — each item provides product + qty + unitPrice; service snapshots cost.
-export const CreateOrderItemInput = z.object({
-  productId: z.number().int().positive(),
-  quantity: z.number().positive(),
-  unitPrice: z.number().min(0),
-  isGift: z.boolean().default(false),
-  vin: z.string().max(64).default(""),
-});
+// Create input — client may either send a final unitPrice directly, OR
+// send recommended + explicit discount (type + value). Both paths end up with
+// a post-discount unitPrice at storage time; pricing.ts derives + enforces BR-41.
+// isGift=true short-circuits pricing → 0/0.
+export const CreateOrderItemInput = z
+  .object({
+    productId: z.number().int().positive(),
+    quantity: z.number().positive(),
+    unitPrice: z.number().min(0),
+    discountType: z.enum(["percent", "fixed"]).optional(),
+    discountValue: z.number().min(0).optional(),
+    isGift: z.boolean().default(false),
+    vin: z.string().max(64).default(""),
+  })
+  .refine(
+    (v) => {
+      if (v.discountType === "percent" && v.discountValue !== undefined) {
+        return v.discountValue >= 0 && v.discountValue <= 100;
+      }
+      return true;
+    },
+    { message: "قيمة الخصم النسبي يجب أن تكون بين 0 و 100", path: ["discountValue"] },
+  )
+  .refine(
+    (v) => (v.discountType === undefined) === (v.discountValue === undefined),
+    { message: "discountType وdiscountValue يجب أن يمررا معاً أو يُتركا معاً", path: ["discountValue"] },
+  );
 export type CreateOrderItemInput = z.infer<typeof CreateOrderItemInput>;
 
 export const CreateOrderInput = z
