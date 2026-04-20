@@ -389,9 +389,21 @@ CHECK (key IN (
 | payment_method | TEXT | DEFAULT 'كاش' |
 | comptable_class | TEXT | NULL (D-61 — PCG class e.g. '6037' inventory_loss، '6251' postage، '6064' supplies. يُصدَّر في CSV للـ expert-comptable) |
 | notes | TEXT | DEFAULT '' |
+| reversal_of | INTEGER | NULL → FK expenses.id ON DELETE RESTRICT (D-82). عمود بنيوي يربط الصف العكسي بالأصلي؛ NULL للصفوف العادية. |
 | created_by | TEXT | NOT NULL |
 | updated_by | TEXT | NULL |
 | updated_at | TIMESTAMPTZ | NULL |
+| deleted_at | TIMESTAMPTZ | NULL (soft-delete؛ ممنوع DELETE — D-04) |
+
+**قيود إضافية (D-82)**:
+- `CHECK (reversal_of IS NULL OR reversal_of <> id)` — يمنع self-reference.
+- `CHECK (reversal_of IS NULL OR amount < 0)` — الصف العكسي يجب أن يحمل مبلغاً سالباً.
+- `UNIQUE INDEX expenses_one_reversal_per_original ON expenses (reversal_of) WHERE reversal_of IS NOT NULL AND deleted_at IS NULL` — يمنع double-reversal لنفس الأصل.
+
+**قواعد تشغيلية**:
+- الـreversal يُنشأ عبر `POST /api/v1/expenses/[id]/reverse` فقط (service ينشئ الصف مع `reversal_of = original.id` + `amount = -original.amount`).
+- لا يمكن عكس صف عكسي نفسه (الأصل يجب أن يحمل `reversal_of IS NULL`).
+- `notes` يبقى حقلاً توضيحياً — ليس مرجعاً بنيوياً.
 
 ---
 

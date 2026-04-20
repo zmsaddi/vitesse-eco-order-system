@@ -1828,6 +1828,146 @@ No production deployment without T+1h and T+24h monitoring reports.
 
 ---
 
+### D-79 — Idempotency Reservation Design (Phase 3.0)
+
+**القرار**: `withIdempotencyRoute` wrapper بلا صفوف ناقصة ولا تعديل schema. السلوك:
+
+```
+1. إذا Idempotency-Key غائب:
+   - routeConfig.requireHeader = 'required' → 400 IDEMPOTENCY_KEY_REQUIRED.
+   - routeConfig.requireHeader = 'optional' → pass-through (بلا ضمان idempotency).
+2. إذا الـheader موجود:
+   a. SELECT pg_advisory_xact_lock(hashtext(key || '|' || endpoint))
+      — يسلسل المتنافسين على نفس (key, endpoint) داخل نفس tx.
+   b. SELECT * FROM idempotency_keys WHERE key=? AND endpoint=?
+      - موجود + username != current → 409 IDEMPOTENCY_KEY_OWNER_MISMATCH
+        (مستخدم آخر استخدم هذا المفتاح على نفس الـendpoint — مشبوه، احجب).
+      - موجود + request_hash != current → 409 IDEMPOTENCY_KEY_MISMATCH.
+      - موجود + كلاهما مطابق → أرجع { response, status_code } المخزَّن
+        (لا re-execute، D-16).
+      - غير موجود → شغّل handler للنهاية داخل نفس tx، احصل على (status, body)،
+        INSERT صفاً كاملاً (كل NOT NULL fields معبَّأة)، ثم COMMIT.
+   c. فشل handler → rollback كامل (بلا صف مُدرَج). Replay = تنفيذ جديد.
+      السلوك الصحيح: طلب فاشل لا يُستنسخ كفاشل؛ العميل يعيد المحاولة.
+```
+
+**القيود الصارمة**:
+- **`endpoint` يُخزَّن بصيغة كاملة** `"POST /api/v1/orders/[id]/cancel"` (method + path template)، لا path فقط. يُمنع الخلط بين POST وPUT على نفس المسار.
+- **ممنوع أي side effect خارجي خارج DB tx داخل handler محمي بـ idempotency** — لا HTTP calls، لا Blob uploads، لا Slack/email، لا file writes. خلاف ذلك يكسر ضمان "لا تكرار" عند replay. إذا احتجت side effect خارجي، أخرجه من الـhandler وشغّله بعد COMMIT عبر آلية منفصلة (لا تحمل Idempotency-Key).
+- **username ليس جزءاً من lookup key** (PK هو `(key, endpoint)` وفق D-57 + schema audit.ts line 39)؛ لكنه يُفحص بعد إيجاد الصف لكشف إساءة استخدام المفاتيح.
+- **requireHeader** enum: `'required' | 'optional'` (لا قيمة ثالثة). GET/HEAD لا تستخدم الـwrapper أصلاً.
+
+**السبب**: تصميم سابق بـ "reservation صف بـ status_code=null, response=null ثم update" يتعارض مع `NOT NULL` في schema؛ إما نعدّل schema (يُكسر D-04 المبدئي "schema قيود صارمة") أو نتجنب الصفوف الناقصة. الـadvisory lock + INSERT post-handler يحل التزامن بلا تسوية.
+
+**الملفات المتأثرة**:
+- `src/lib/idempotency.ts` (Phase 3.0 code).
+- `35_API_Endpoints.md` § Idempotency (تضاف إشارة للـwrapper + requireHeader per-route).
+- `29_Concurrency.md` § Idempotency-Key (يربط بـ D-79).
+- `31_Error_Handling.md` (يُضيف `IDEMPOTENCY_KEY_REQUIRED` + `IDEMPOTENCY_KEY_OWNER_MISMATCH` + `IDEMPOTENCY_KEY_MISMATCH`).
+
+**التاريخ**: 2026-04-20.
+
+---
+
+### D-80 — activity_log Hash-Chain Write Protocol
+
+**القرار**: كل كتابة على `activity_log` تمر عبر `logActivity(tx, entry)` helper واحد، السلوك:
+
+```
+1. SELECT pg_advisory_xact_lock(ACTIVITY_LOG_CHAIN_KEY)
+   — ثابت int مُعرَّف مرة واحدة في src/lib/activity-log.ts (مثلاً 1000001).
+   — يقفل السلسلة كاملة بما فيها حالة "الجدول فارغ" (سباق أول إدراجين محلول).
+2. SELECT row_hash FROM activity_log ORDER BY id DESC LIMIT 1
+   — قد يرجع فارغاً → prev_hash = NULL للسطر الأول (schema audit.ts: prev_hash nullable).
+3. row_hash = sha256(
+       (prev_hash ?? '') + '|' +
+       canonicalJSON({ action, entityType, entityId, userId, username, metadata }) + '|' +
+       ISO_timestamp
+    )
+   — canonicalJSON = ترتيب مفاتيح أبجدي عميق؛ لا whitespace؛ لا trailing commas.
+4. INSERT INTO activity_log (..., prev_hash, row_hash) VALUES (...).
+5. الـlock يُحرَّر تلقائياً عند tx commit/rollback.
+```
+
+**القيود**:
+- **INSERT مباشر على `activity_log` ممنوع** من أي مكان خارج helper — يُفرَض عبر code review (أو ESLint rule إن أمكن في Phase 3+).
+- `logActivity` لا تبدأ tx خاصة بها؛ تأخذ `tx` من المستدعي (مهم: كل activity مرتبطة بنفس tx المالي).
+- التحقق integration: بعد كل suite mutation، يفحص query أن `sha256(row_{n-1}.row_hash + canonical(row_n.data)) === row_n.row_hash` لكل n>0. كسر السلسلة = failed test.
+
+**السبب**: `FOR UPDATE` على آخر صف لا يحمي الجدول الفارغ؛ tx متنافستان ترتبان INSERT مع `prev_hash=NULL` كلاهما. الـadvisory lock يسلسل الكتّاب منذ قبل الـSELECT.
+
+**الملفات المتأثرة**:
+- `src/lib/activity-log.ts` (Phase 3.0 code).
+- `27_Audit_Log.md` (يربط بـ D-80 كعقد الكتابة).
+
+**التاريخ**: 2026-04-20.
+
+---
+
+### D-81 — Phase 3.0 Infrastructure Precedence
+
+**القرار**: قبل أول mutation endpoint جديد في Phase 3 (orders POST، cancel، start-preparation، purchase، expense، etc.) يجب أن:
+
+1. `src/lib/activity-log.ts` موجود + unit-tested + integration-tested على `TEST_DATABASE_URL` (ليس skip).
+2. `src/lib/idempotency.ts` موجود + unit-tested + integration-tested (ليس skip).
+3. أي mutation handler جديد يستخدم helpers أعلاه؛ INSERT مباشر على `activity_log` أو `idempotency_keys` مرفوض في code review.
+4. الـwrapper idempotency يقبل per-route config `{ endpoint: string, requireHeader: 'required'|'optional' }` وفق D-16 (إلزامي على cancel/collect/settlements/distributions، اختياري على orders/payments).
+
+**شرط قبول Phase 3.0**: `TEST_DATABASE_URL` متوفر في CI + البيئة المحلية. بلا اتصال DB حقيقي لا يُقبَل أي checkpoint (integration tests ليست skippable في Phase 3.0).
+
+**السبب**: بدء Phase 3 بـ UI أو endpoints قبل البنية الأساسية يخلق دين تقني فوري — activity_log/idempotency يحتاجان pattern موحَّد من أول mutation مالي.
+
+**الملفات المتأثرة**:
+- `DEVELOPMENT_PLAN.md` § Phase 3 المهام (يُشير إلى D-81 كشرط مسبق).
+- `.github/workflows/ci.yml` (يُفعِّل `TEST_DATABASE_URL` secret قبل قبول Phase 3.0).
+
+**التاريخ**: 2026-04-20.
+
+---
+
+### D-82 — expenses.reversal_of Schema
+
+**القرار**: جدول `expenses` يكتسب عموداً جديداً `reversal_of` يربط الصف العكسي بالأصلي بنيوياً (لا convention نصي في `notes`):
+
+```sql
+ALTER TABLE expenses
+  ADD COLUMN reversal_of INTEGER NULL
+    REFERENCES expenses(id) ON DELETE RESTRICT,
+  ADD CONSTRAINT expenses_no_self_reversal
+    CHECK (reversal_of IS NULL OR reversal_of <> id),
+  ADD CONSTRAINT expenses_reversal_amount_negative
+    CHECK (reversal_of IS NULL OR amount < 0);
+
+CREATE UNIQUE INDEX expenses_one_reversal_per_original
+  ON expenses (reversal_of)
+  WHERE reversal_of IS NOT NULL AND deleted_at IS NULL;
+```
+
+**السبب**:
+- `notes` حقل نص حر — لا يُفرَض، لا يُفهرَس، لا يُربَط، يتسرب (drift) مع الزمن.
+- العكس المالي يحتاج مرجعاً بنيوياً لـ audit trail سليم (يتسق مع الصرامة في `idempotency_keys` ومنطق D-04/D-57).
+- الـpartial unique يمنع الخطأ السهل: عكس نفس المصروف مرتين (double-reversal). الحالة `deleted_at IS NULL` في الفلتر تسمح بإعادة إنشاء reversal بعد soft-delete للأول (نادر، لكن تغطية صحيحة).
+- CHECK على `amount < 0` للـreversal يضمن أن الصف العكسي فعلاً سالب.
+- CHECK على `reversal_of <> id` يمنع السيلف (أي صف يشير لنفسه).
+- `ON DELETE RESTRICT` متّسق مع D-04 (لا DELETE على expenses أصلاً، لكن احتياطاً).
+
+**قواعد الاستخدام**:
+- `POST /api/v1/expenses/[id]/reverse` هو المسار الوحيد لإنشاء صف عكسي (service layer ينشئ `expense` جديد بـ `amount = -original.amount`, `reversal_of = original.id`, `notes = reason`).
+- `notes` يبقى للشرح فقط، **لا يُستخدم كمرجع بنيوي**.
+- service يتحقق (قبل الـadvisory lock الذي يحمي idempotency):
+  - الأصل موجود + `deleted_at IS NULL` + `reversal_of IS NULL` (لا تعكس صفاً عكسياً بنفسه).
+  - لا يوجد صف آخر reversal_of=original.id بالفعل (guard مع الـpartial unique كـbackstop).
+
+**الملفات المتأثرة**:
+- `src/db/schema/treasury.ts` (Phase 3.0 code — الجدول expenses يعيش هنا).
+- Migration جديدة `NNNN_expenses_reversal_of.sql` (Phase 3.0).
+- `02_DB_Tree.md` § expenses (يُحدَّث الآن).
+- `35_API_Endpoints.md` § expenses (يُحدَّث الآن ليُدرج `POST /api/v1/expenses/[id]/reverse`).
+
+**التاريخ**: 2026-04-20.
+
+---
+
 ## ملحق: القرارات السابقة (مؤكَّدة سابقاً في DEVELOPMENT_PLAN.md)
 
 القرارات التالية أُخذت قبل مراجعات المدقِّقين الثلاثة وتظل سارية:
@@ -1845,16 +1985,20 @@ No production deployment without T+1h and T+24h monitoring reports.
 
 ## إشارة الحالة
 
-- **عدد القرارات الكلي**: **78** (D-01..D-78).
-- **التاريخ النهائي**: 2026-04-19 (Phase 0c — مُغلَقة بتقرير #07).
+- **عدد القرارات الكلي**: **82** (D-01..D-82).
+- **آخر تحديث**: 2026-04-20 (Phase 3.0 pre-code design — D-79..D-82 مضافة).
 - **حالة التطبيق**:
   - **D-01..D-25**: مُطبَّقة بالكامل على specs (Phase 0a).
   - **D-26..D-65**: مُطبَّقة على specs (Phase 0c — المراجعات الداخلية 01..06).
   - **D-66..D-76**: مُطبَّقة على specs (Phase 0c — المراجعة الخارجية #07 + rebuttal).
   - **D-77**: مبدأ Phase Delivery Gate (متطلَّب proof).
-  - **D-78**: مواصفة Delivery Acceptance Framework الكاملة (13-gate + 13-section report + monitoring + KPIs). يُطبَّق على كل تسليم قادم.
+  - **D-78**: مواصفة Delivery Acceptance Framework (13-gate + 13-section report). يُطبَّق على كل تسليم.
+  - **D-79**: Idempotency reservation design (advisory lock + INSERT post-handler، لا صفوف ناقصة). Phase 3.0 infrastructure.
+  - **D-80**: activity_log hash-chain write protocol (advisory lock يحمي الجدول الفارغ). Phase 3.0 infrastructure.
+  - **D-81**: Phase 3.0 infrastructure precedence — activity_log + idempotency helpers قبل أي mutation handler جديد + TEST_DATABASE_URL شرط قبول.
+  - **D-82**: expenses.reversal_of عمود FK بنيوي + partial unique + CHECK constraints. يحل محل convention في notes.
 - **D-33 مُعلَّم SUPERSEDED** بواسطة D-73 (voice rate limit DB-only).
 - **D-75 CI gates مُوسَّع من 7 إلى 13 بواسطة D-78**.
-- **التالي**: الانتظار لتأكيد المستخدم "**ابدأ**" قبل بدء Phase 0 (الكود).
+- **التالي**: Phase 3.0 code blocked على توفر `TEST_DATABASE_URL` (D-81). عند توفرها + تأكيد المستخدم "**ابدأ**" → يُنفَّذ Step B (activity_log helper + idempotency wrapper + integration tests + تعديل schema وفق D-82).
 
 **Phase 0c closure report**: [`../audit-reports/07_developer_review_and_rebuttal.md`](../audit-reports/07_developer_review_and_rebuttal.md).

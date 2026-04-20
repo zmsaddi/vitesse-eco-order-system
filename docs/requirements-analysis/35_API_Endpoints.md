@@ -127,7 +127,8 @@
 | `/api/v1/permissions` | GET/PUT | pm | الصلاحيات |
 | `/api/backup` | GET/POST | pm,gm | تنزيل/استعادة نسخة (C4) |
 | `/api/health` | GET | عام | DB latency + timestamp |
-| `/api/v1/expenses` | GET/POST/PUT | pm,gm,manager | **(D-76 + D-04)** المصاريف — **لا DELETE**. تصحيح مصروف خاطئ = إدراج مصروف معاكس بـ `amount` سالب + notes يُشير للسبب + activity_log كامل (audit trail). |
+| `/api/v1/expenses` | GET/POST/PUT | pm,gm,manager | **(D-76 + D-04)** المصاريف — **لا DELETE**. تصحيح مصروف خاطئ يمر عبر `/[id]/reverse` (أدناه). |
+| `/api/v1/expenses/[id]/reverse` | POST | pm,gm | **(D-82)** عكس مصروف — ينشئ صف `expenses` جديد بـ `amount < 0` + `reversal_of = {original.id}` (عمود بنيوي FK، ليس `notes`) + `notes = reason` + activity_log `action='reverse'`. محمي بـ `Idempotency-Key` (`requireHeader='required'` — D-79). `reversal_of` عليه partial unique يمنع double-reversal. عكس صف عكسي نفسه مرفوض (`reversal_of IS NOT NULL` على الأصل → reject). |
 | `/api/v1/inventory/count` | GET/POST | pm,gm,manager,stock_keeper | الجرد |
 
 ## الإشعارات + النشاطات
