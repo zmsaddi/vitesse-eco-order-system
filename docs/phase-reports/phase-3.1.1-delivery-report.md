@@ -234,3 +234,27 @@ The reviewer was precise on all four points:
 4. Per-item `FOR UPDATE` really was deadlock-prone under reversed payload orderings. The canonical "lock-all-once-at-tx-start" protocol is a small refactor that makes the guarantee provable by construction.
 
 No scope creep, no incidental changes. Three new source files (one module + one test file + this report), four surgical modifications. `npm run test:unit` exits 0 with 191/191; `npm run test:integration` is 135/135 on the live Neon branch. Both scripts straight from the repo, no shell tricks.
+
+---
+
+## Errata (added post-review — 2026-04-20)
+
+Reviewer flagged three real gaps after commit `9b25320`:
+
+### §2 Fix 3 (cost-leak redaction) — only the error was closed; the DTO itself still leaked
+
+- The Phase 3.1.1 fix only stopped the PRICE_BELOW_COST error from carrying `costPrice` in its `details`. It did NOT redact `OrderItemDto.costPrice` on the 2xx response path. A seller creating an order (POST /api/v1/orders) or reading their own order (GET /api/v1/orders/[id]) still received the full `costPrice` field in the response JSON.
+- That's stronger than the error-path leak: every successful seller response was exposing the cost snapshot.
+- **Fix (Phase 3.1.2)**: new `src/modules/orders/redaction.ts` with `redactOrderForRole(order, role)` + `redactOrdersForRole(orders, role)`. Strips `costPrice` for seller + driver + stock_keeper (matches 16_Data_Visibility). Wired into all 6 order-surface routes (POST/GET/cancel/start-preparation/mark-ready + preparation list). `OrderItemDto.costPrice` becomes `.optional()` in the Zod DTO.
+
+### §2 Fix 2 (VIN_DUPLICATE) — normalization gap
+
+- Within-request dedup used `trim().toLowerCase()`. Storage used raw input (no trim). Cross-order compare used `LOWER(order_items.vin)` — no TRIM. Sequence: order A with vin `"  VIN-123  "` stored verbatim (with spaces); order B with vin `"VIN-123"` compared → `LOWER(" VIN-123 ") = " vin-123 "` vs `"vin-123"` → mismatch → both accepted.
+- **Fix (Phase 3.1.2)**: introduced canonical `normalizeVin(raw)` = `(raw ?? "").trim().toLowerCase()`. Used on Node side AND as SQL `LOWER(TRIM(...))` in the cross-order query. Storage path in `pricing.ts` now calls `input.vin.trim()` before the INSERT so the raw value no longer sneaks through with whitespace. Integration test proves: stored VIN is trimmed; a second order with same VIN in different case + whitespace still triggers 409.
+
+### §2 Fix 4 (canonical lock protocol) — race-unsafe for VIN when product sets differ
+
+- Phase 3.1.1's lock protocol covered products + gift_pool only. Two concurrent tx's with completely disjoint product sets but the same VIN would both pass the cross-order read-check (each sees no existing row at the moment of the check, before either inserts) and both insert. No product/gift_pool lock contention was triggered because the rows didn't overlap.
+- **Fix (Phase 3.1.2)**: extended `acquireOrderCreateLocks(tx, items)` with a third step — one `pg_advisory_xact_lock(hashtext('vin:' || normalized))` per unique normalized VIN in the payload, taken in sorted order (deterministic). Namespace prefix `vin:` keeps it isolated from activity-log chain (1_000_001), cancellations chain (1_000_002), idempotency keys, and refCode locks. Integration test proves: two concurrent POSTs with disjoint products + same VIN now produce exactly `[201, 409]` (one succeeds, one is blocked).
+
+No body claims about endpoints, migrations, or build output are affected. The three corrections land in commit **(Phase 3.1.2)**.

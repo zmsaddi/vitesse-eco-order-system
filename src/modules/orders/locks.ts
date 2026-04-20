@@ -5,25 +5,37 @@ import { BusinessRuleError, ConflictError } from "@/lib/api-errors";
 import type { CreateOrderItemInput } from "./dto";
 
 // Phase 3.1.1 — canonical lock protocol for createOrder (29_Concurrency §gift_pool).
+// Phase 3.1.2 — extended with VIN advisory locks to close the race that two
+//               concurrent tx's with disjoint products could both insert the
+//               same VIN (product locks alone don't serialize them).
 //
 // To stay deadlock-free regardless of per-request item order, every createOrder
-// invocation MUST acquire row locks in this global order, BEFORE any per-item
-// work:
+// invocation MUST acquire its locks in this strict canonical order BEFORE any
+// per-item work:
 //   1. All unique product_ids mentioned in the payload, sorted ASC, FOR UPDATE.
 //   2. All unique product_ids whose item has is_gift=true, sorted ASC, FOR UPDATE
 //      against gift_pool.
+//   3. All unique normalized VINs (trim + lowercase) mentioned in the payload,
+//      sorted ASC, via pg_advisory_xact_lock(hashtext('vin:' || vin)).
 //
-// This "lock-all-once-at-tx-start" matches the spec's protocol. Inside the item
-// loop, processOrderItem() then reads/writes those already-locked rows without
-// re-acquiring locks (no FOR UPDATE inside the loop).
+// Two concurrent calls with overlapping VINs serialize on (3) regardless of
+// their product sets. Inside the item loop, processOrderItem() reads/writes
+// the already-locked rows without re-acquiring anything (no FOR UPDATE there).
+
+/**
+ * Canonical VIN normalization. Used identically on the Node side (within-
+ * request dedup + advisory-lock key) and server-side in SQL (LOWER(TRIM(vin)))
+ * for the cross-order dedup query.
+ */
+export function normalizeVin(raw: string | null | undefined): string {
+  return (raw ?? "").trim().toLowerCase();
+}
 
 export async function acquireOrderCreateLocks(
   tx: DbTx,
   items: CreateOrderItemInput[],
 ): Promise<void> {
-  // Unique product ids, ASC — lock all rows once, ordered, so concurrent
-  // createOrder calls on the same product set acquire locks in identical
-  // order regardless of the caller's payload ordering (no deadlock).
+  // (1) Products — unique ids, ASC.
   const productIds = [...new Set(items.map((i) => i.productId))].sort((a, b) => a - b);
   if (productIds.length > 0) {
     await tx
@@ -34,7 +46,7 @@ export async function acquireOrderCreateLocks(
       .for("update");
   }
 
-  // Unique gift product ids, ASC — gift_pool FOR UPDATE (29_Concurrency).
+  // (2) Gift pool rows — unique product ids for gift items, ASC.
   const giftProductIds = [
     ...new Set(items.filter((i) => i.isGift).map((i) => i.productId)),
   ].sort((a, b) => a - b);
@@ -46,6 +58,17 @@ export async function acquireOrderCreateLocks(
       .orderBy(asc(giftPool.productId))
       .for("update");
   }
+
+  // (3) VIN advisory locks — one per unique normalized VIN, in sorted order.
+  // Keyed by "vin:" prefix to avoid colliding with other advisory locks in
+  // the codebase (activity_log chain = 1_000_001, cancellations = 1_000_002,
+  // idempotency keys = hashtext(key||endpoint), refCode = hashtext(prefix|day)).
+  const vinKeys = [
+    ...new Set(items.map((i) => normalizeVin(i.vin)).filter((v) => v.length > 0)),
+  ].sort();
+  for (const vin of vinKeys) {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${"vin:" + vin}))`);
+  }
 }
 
 /**
@@ -54,19 +77,18 @@ export async function acquireOrderCreateLocks(
  * Case-insensitive + whitespace-trimmed comparison.
  */
 export function assertNoDuplicateVinWithinRequest(items: CreateOrderItemInput[]): void {
-  const seen = new Map<string, number>(); // vin → index
+  const seen = new Map<string, number>(); // normalized vin → first-seen index
   for (let i = 0; i < items.length; i++) {
-    const raw = items[i].vin?.trim() ?? "";
-    if (!raw) continue;
-    const normalized = raw.toLowerCase();
+    const normalized = normalizeVin(items[i].vin);
+    if (!normalized) continue;
     const prev = seen.get(normalized);
     if (prev !== undefined) {
       throw new BusinessRuleError(
-        `رقم VIN "${raw}" مكرَّر داخل نفس الطلب (الأصناف ${prev + 1} و${i + 1}).`,
+        `رقم VIN "${items[i].vin}" مكرَّر داخل نفس الطلب (الأصناف ${prev + 1} و${i + 1}).`,
         "VIN_DUPLICATE",
         400,
         undefined,
-        { vin: raw, itemIndexes: [prev, i] },
+        { vin: items[i].vin, itemIndexes: [prev, i] },
       );
     }
     seen.set(normalized, i);
@@ -83,13 +105,11 @@ export async function assertNoDuplicateVinAcrossOrders(
   tx: DbTx,
   items: CreateOrderItemInput[],
 ): Promise<void> {
-  const vins = items
-    .map((i) => i.vin?.trim() ?? "")
-    .filter((v): v is string => v.length > 0)
-    .map((v) => v.toLowerCase());
-  if (vins.length === 0) return;
-  const unique = [...new Set(vins)];
+  const unique = [...new Set(items.map((i) => normalizeVin(i.vin)).filter((v) => v.length > 0))];
+  if (unique.length === 0) return;
 
+  // Phase 3.1.2: both sides use the canonical LOWER(TRIM(...)) normalization so
+  // stored values like " VIN-123 " are still detected against a new "VIN-123".
   const rows = await tx
     .select({
       vin: orderItems.vin,
@@ -101,7 +121,7 @@ export async function assertNoDuplicateVinAcrossOrders(
     .innerJoin(orders, eq(orders.id, orderItems.orderId))
     .where(
       and(
-        inArray(sql`LOWER(${orderItems.vin})`, unique),
+        inArray(sql`LOWER(TRIM(${orderItems.vin}))`, unique),
         ne(orderItems.vin, ""),
         isNull(orderItems.deletedAt),
         isNull(orders.deletedAt),

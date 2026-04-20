@@ -2,6 +2,7 @@ import { requireRole } from "@/lib/session-claims";
 import { apiError, ValidationError } from "@/lib/api-errors";
 import { withIdempotencyRoute } from "@/lib/idempotency";
 import { CreateOrderInput } from "@/modules/orders/dto";
+import { redactOrderForRole } from "@/modules/orders/redaction";
 import { createOrder } from "@/modules/orders/service";
 
 export const runtime = "nodejs";
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
           username: claims.username,
           role: claims.role,
         });
-        return { status: 201, body: { order } };
+        return { status: 201, body: { order: redactOrderForRole(order, claims.role) } };
       },
     );
   } catch (err) {

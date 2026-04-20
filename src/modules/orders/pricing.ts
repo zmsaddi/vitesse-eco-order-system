@@ -345,7 +345,10 @@ export async function processOrderItem(
     discountValue: discountValue != null ? discountValue.toFixed(2) : null,
     lineTotal: lineTotal.toFixed(2),
     isGift: input.isGift,
-    vin: input.vin,
+    // Phase 3.1.2: store VIN trimmed (preserve case). Compare canonically via
+    // LOWER(TRIM(vin)) in the cross-order dedup check. Matches the within-
+    // request normalization and blocks the " VIN-123 " vs "VIN-123" bypass.
+    vin: input.vin.trim(),
     commissionRuleSnapshot,
   };
 }

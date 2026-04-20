@@ -3,6 +3,7 @@ import { withRead } from "@/db/client";
 import { requireRole } from "@/lib/session-claims";
 import { apiError } from "@/lib/api-errors";
 import { listPreparationQueue } from "@/modules/orders/preparation";
+import { redactOrdersForRole } from "@/modules/orders/redaction";
 
 export const runtime = "nodejs";
 
@@ -13,7 +14,7 @@ export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   try {
-    await requireRole(request, ["pm", "gm", "manager", "stock_keeper"]);
+    const claims = await requireRole(request, ["pm", "gm", "manager", "stock_keeper"]);
     const url = new URL(request.url);
     const limit = url.searchParams.has("limit")
       ? Number(url.searchParams.get("limit"))
@@ -24,7 +25,10 @@ export async function GET(request: Request) {
     const result = await withRead(undefined, (db) =>
       listPreparationQueue(db, { limit, offset }),
     );
-    return NextResponse.json({ orders: result.rows, total: result.total });
+    return NextResponse.json({
+      orders: redactOrdersForRole(result.rows, claims.role),
+      total: result.total,
+    });
   } catch (err) {
     return apiError(err);
   }

@@ -13,7 +13,11 @@ export const OrderItemDto = z.object({
   quantity: z.number(),
   recommendedPrice: z.number(),
   unitPrice: z.number(),
-  costPrice: z.number(),
+  // costPrice is optional on the DTO because it's role-redacted at the response
+  // boundary (16_Data_Visibility: seller/driver/stock_keeper do NOT see cost).
+  // Internal callers (service + mapper) always populate it; route handlers strip
+  // it via redactOrderForRole() before JSON serialization for the restricted roles.
+  costPrice: z.number().optional(),
   discountType: z.enum(["percent", "fixed"]).nullable(),
   discountValue: z.number().nullable(),
   lineTotal: z.number(),
