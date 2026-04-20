@@ -36,6 +36,13 @@
       "when": 1776640413459,
       "tag": "0004_suppliers_dedup_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1776651842250,
+      "tag": "0005_expenses_reversal_of",
+      "breakpoints": true
     }
   ]
 }
