@@ -803,7 +803,7 @@ CHECK (key IN (
 - TTL = 24 ساعة.
 - في بداية كل POST mutation حرج (`/api/orders`, `/api/orders/[id]/cancel`, `/api/orders/[id]/collect`, `/api/settlements`, `/api/distributions`, `/api/payments`): الـ middleware يفحص الـ key.
 - إذا موجود + `request_hash` يطابق → يُعاد `response` و `status_code` كما هو. لا re-execution.
-- إذا موجود + `request_hash` مختلف → 409 `IDEMPOTENCY_KEY_CONFLICT`.
+- إذا موجود + `request_hash` مختلف → 409 `IDEMPOTENCY_KEY_MISMATCH`.
 - إذا غير موجود → يُنفَّذ الـ mutation، ثم يُدرَج الصف في نهاية الـ transaction.
 - cleanup عبر `/api/cron/daily`: `DELETE FROM idempotency_keys WHERE expires_at < NOW()`.
 

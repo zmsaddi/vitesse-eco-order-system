@@ -182,7 +182,8 @@ export class BusinessRuleError extends Error {
 | `VOICE_BLACKLISTED` | النص غير مفهوم — حاول مرة أخرى | Blacklist matched: {phrase} |
 | `AMBIGUOUS_ENTITY` | عثرت على عدة نتائج — اختر من القائمة | Resolver top 3: {candidates} |
 | `IDEMPOTENCY_KEY_REQUIRED` | خطأ داخلي. أعد فتح الصفحة | Dev: endpoint requires header Idempotency-Key |
-| `IDEMPOTENCY_KEY_CONFLICT` | تم إرسال نفس الطلب مرتين. أعد تحميل الصفحة | Dev: key collision with different body |
+| `IDEMPOTENCY_KEY_MISMATCH` | تم إرسال نفس الطلب مرتين. أعد تحميل الصفحة | Dev: key collision with different body (D-79) |
+| `IDEMPOTENCY_KEY_OWNER_MISMATCH` | خطأ داخلي. أعد فتح الصفحة | Dev: key already used by different username (D-79) |
 | `SKU_LIMIT_REACHED` | وصلت الحد الأقصى للمنتجات النشطة. عطِّل منتجاً قبل إضافة جديد | sku_limit={n}, active count={n} |
 | `MAX_IMAGES_REACHED` | الحد الأقصى 3 صور لكل منتج | Product {id} has 3 images |
 | `CUSTODY_CAP_EXCEEDED` | تجاوزت سقف العهدة. سلِّم الأموال لمديرك أولاً | Driver custody {balance}+{new} > cap {cap} |

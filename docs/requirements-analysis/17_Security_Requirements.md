@@ -66,7 +66,8 @@
 - header `Idempotency-Key` يُقبل على: `POST /api/orders`, `POST /api/orders/:id/cancel`, `POST /api/orders/:id/collect`, `POST /api/payments`, `POST /api/settlements`, `POST /api/distributions`.
 - جدول `idempotency_keys` يخزِّن الـ response مع TTL 24h.
 - نفس الـ key + نفس `request_hash` → يُعاد الـ response المخزَّن بدون re-execution.
-- نفس الـ key + `request_hash` مختلف → 409 `IDEMPOTENCY_KEY_CONFLICT`.
+- نفس الـ key + `request_hash` مختلف → 409 `IDEMPOTENCY_KEY_MISMATCH`.
+- نفس الـ key + `endpoint` نفسه + `username` مختلف → 409 `IDEMPOTENCY_KEY_OWNER_MISMATCH` (D-79).
 
 ## خصوصية البيانات (PII) — CNIL / GDPR
 

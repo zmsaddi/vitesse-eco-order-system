@@ -174,5 +174,6 @@
   - مُحدَّد في `02_DB_Tree.md` (جدول `idempotency_keys`) + `29_Concurrency.md` (flow).
   - **إلزامي** على: cancel, collect, settlements POST, distributions POST.
   - **مُوصى به** على: orders POST/PUT, payments POST, purchases POST/reverse.
-  - 409 `IDEMPOTENCY_KEY_CONFLICT` إذا الـ key يتكرر مع body مختلف.
+  - 409 `IDEMPOTENCY_KEY_MISMATCH` إذا الـ key يتكرر مع body مختلف (request_hash mismatch — D-79).
+  - 409 `IDEMPOTENCY_KEY_OWNER_MISMATCH` إذا الـ key يتكرر مع username مختلف على نفس الـ endpoint (D-79).
   - 400 `IDEMPOTENCY_KEY_REQUIRED` إذا مفقود على endpoint إلزامي.

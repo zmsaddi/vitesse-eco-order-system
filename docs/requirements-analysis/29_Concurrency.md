@@ -136,7 +136,7 @@ export async function POST(req: Request) {
     if (existing.length) {
       if (existing[0].requestHash !== bodyHash) {
         return NextResponse.json(
-          { error: 'مفتاح Idempotency يتكرر مع body مختلف', code: 'IDEMPOTENCY_KEY_CONFLICT' },
+          { error: 'مفتاح Idempotency يتكرر مع body مختلف', code: 'IDEMPOTENCY_KEY_MISMATCH' },
           { status: 409 }
         );
       }

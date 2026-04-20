@@ -132,8 +132,9 @@ export class CustodyCapExceededError extends BusinessRuleError {
 | `VOICE_RATE_LIMIT` | وصلت الحد الأقصى للإدخال الصوتي ({n}/دقيقة). انتظر قليلاً ثم حاول مجدداً | User={u} exceeded voice_rate_limit_per_min={n} | 429 |
 | `VOICE_BLACKLISTED` | لم أفهم التسجيل. حاول بصوت أوضح | Transcript matched BLACKLIST_PHRASES | 400 |
 | `AMBIGUOUS_ENTITY` | يوجد عدة احتمالات لـ "{name}". اختر من القائمة | Resolver returned 2+ candidates for {entity_type} | 400 |
-| `IDEMPOTENCY_KEY_REQUIRED` | خطأ فني — تواصل مع الدعم إن تكرر | Endpoint requires Idempotency-Key header | 400 |
-| `IDEMPOTENCY_KEY_CONFLICT` | تم إرسال نفس الطلب مرتين. افتح الصفحة مجدداً وأعد المحاولة | key={k} endpoint={e} request_hash mismatch | 409 |
+| `IDEMPOTENCY_KEY_REQUIRED` | خطأ فني — تواصل مع الدعم إن تكرر | Endpoint requires Idempotency-Key header (D-16/D-79) | 400 |
+| `IDEMPOTENCY_KEY_MISMATCH` | تم إرسال نفس الطلب مرتين. افتح الصفحة مجدداً وأعد المحاولة | key={k} endpoint={e} request_hash mismatch (D-79) | 409 |
+| `IDEMPOTENCY_KEY_OWNER_MISMATCH` | خطأ فني — تواصل مع الدعم إن تكرر | key={k} endpoint={e} already used by different username (D-79) | 409 |
 | `VIN_DUPLICATE` | رقم VIN ({vin}) مُستخدَم على منتج آخر غير ملغى | VIN {vin} found on active order_item {id} | 400 |
 | `SKU_LIMIT_REACHED` | وصلت الحد الأقصى للمنتجات النشطة ({limit}). عطِّل منتجاً قبل إضافة جديد | COUNT(products WHERE active=true) >= {limit} | 400 |
 | `MAX_IMAGES_REACHED` | لا يمكن إضافة أكثر من {max} صور لكل منتج | product_images count for product_id={id} >= {max} | 400 |

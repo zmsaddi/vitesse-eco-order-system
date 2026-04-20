@@ -1012,7 +1012,7 @@ ALTER TABLE users ADD COLUMN onboarded_at TIMESTAMPTZ NULL;
 ### D-50 — User-Friendly Error Messages
 
 **القرار**: إعادة صياغة الأخطاء في `31_Error_Handling.md` بلغة المستخدم النهائي:
-- `IDEMPOTENCY_KEY_CONFLICT` → "تم إرسال نفس الطلب مرتين. افتح الصفحة مجدداً وأعد المحاولة."
+- `IDEMPOTENCY_KEY_MISMATCH` → "تم إرسال نفس الطلب مرتين. افتح الصفحة مجدداً وأعد المحاولة."
 - `SKU_LIMIT_REACHED` → "وصلت الحد الأقصى للمنتجات النشطة. عطِّل منتجاً قبل إضافة جديد."
 - `CRON_UNAUTHORIZED` → **لا تظهر أبداً للمستخدم** (server-only).
 - `CUSTODY_CAP_EXCEEDED` → "تجاوزت السقف النقدي. سلِّم الأموال لمديرك أولاً."
