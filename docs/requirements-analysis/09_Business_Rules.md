@@ -52,7 +52,7 @@
 | BR-15 | **الإلغاء مسموح دائماً** | لا منع للإلغاء حتى لو العمولة مصروفة (قرار C2 — BR-17 القديم أُلغي) |
 | BR-16 | **صلاحيات الإلغاء** | PM/GM: أي حالة. Manager: محجوز فقط. Seller: خاصتي المحجوزة. Driver/Stock Keeper: لا |
 | BR-17 | **سبب إلزامي** | كل إلغاء يتطلب سبب نصي غير فارغ |
-| BR-18 | **شاشة إلغاء C1** | 3 خيارات إلزامية في جدول `cancellations`: (1) `return_to_stock` (bool) — إعادة الكمية إلى stock؟ (2) `seller_bonus_action ∈ {keep, cancel_unpaid, cancel_as_debt}` — keep=إبقاء مع status=retained؛ cancel_unpaid=حذف صف bonus (للعمولات غير المصروفة)؛ cancel_as_debt=تسوية سالبة (للعمولات المصروفة). (3) `driver_bonus_action` — نفس المنطق. عند عدم وجود عمولات: القيمة `cancel_unpaid` افتراضياً بلا تعطيل. كل ذلك داخل transaction واحدة مع 8 invariants محفوظة في الاختبارات. |
+| BR-18 | **شاشة إلغاء C1** | 3 خيارات إلزامية في جدول `cancellations`: (1) `return_to_stock` (bool) — إعادة الكمية إلى stock؟ (2) `seller_bonus_action ∈ {keep, cancel_unpaid, cancel_as_debt}` — keep=إبقاء مع status=retained؛ cancel_unpaid=**soft-delete لصف bonus** (`deleted_at=NOW(), deleted_by=actor`) للعمولات غير المصروفة — ممنوع DELETE SQL لمطابقة D-04/30_Data_Integrity؛ cancel_as_debt=تسوية سالبة (للعمولات المصروفة). (3) `driver_bonus_action` — نفس المنطق. عند عدم وجود صف bonus بعد (مثلاً الإلغاء في Phase 3 قبل حساب العمولات في Phase 4): القيمة `cancel_unpaid` no-op بلا تعطيل. كل ذلك داخل transaction واحدة مع 8 invariants محفوظة في الاختبارات. |
 | BR-19 | **عمولة مصروفة → دين** | عند اختيار `cancel_as_debt` لعمولة settled → يُدرَج صف **settlement سالب** (`amount = -total_bonus`) يُنتج عنه خصم من الدفعة التالية لنفس المستلم. الدين قابل للتجديد (لا تسقط بفترة). |
 | BR-20 | **سجل الإلغاء** | كل إلغاء يُسجل في جدول cancellations مع كل القرارات والحالات السابقة |
 

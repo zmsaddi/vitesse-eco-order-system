@@ -73,11 +73,12 @@ v2 هو نظام إدارة عمليات كامل لشركة **Vitesse Eco SAS**
 2. Clients + Products + Suppliers CRUD minimal (Phase 2).
 3. Orders multi-item + Cancellation C1 **simple mode فقط للـ operational roles** (Phase 3).
 4. Preparation board للـ stock_keeper (Phase 3).
-5. Delivery + confirmation + collection للـ driver (Phase 3).
-6. Invoice frozen snapshot + PDF (Phase 3).
-7. Treasury handover driver → manager → GM (Phase 3).
-8. Role home = Action Hub لـ PM/GM/manager (D-72)، task-first للـ operational (غير مغيَّر).
-9. Basic notifications (in-app، on-demand — D-42).
+5. Purchases weighted-avg + reverse + expenses (Phase 3).
+6. Delivery + confirmation + collection للـ driver (Phase 4).
+7. Invoice frozen snapshot + PDF (Phase 4).
+8. Treasury handover driver → manager → GM (Phase 4).
+9. Role home = Action Hub لـ PM/GM/manager (D-72)، task-first للـ operational (غير مغيَّر).
+10. Basic notifications (in-app، on-demand — D-42).
 
 **مؤجَّل إلى post-MVP (Phases 4..6)**:
 - Voice input → Phase 5 مع re-evaluation أولاً (الاستمرار غير مضمون).
@@ -295,9 +296,11 @@ No production deployment without T+1h and T+24h monitoring reports.
 
 ---
 
-### Phase 3 — الطلبات متعددة الأصناف + الإلغاء + المشتريات — **XXL (12-16 يوم)**
+### Phase 3 — الطلبات متعددة الأصناف + الإلغاء + التحضير + المشتريات + المصاريف — **XXL (12-16 يوم)**
 
-**الهدف**: تدفق البيع الكامل بما فيه multi-item، خصومات، هدايا، VIN، شاشة الإلغاء C1، المتوسط المرجح للمشتريات.
+> **Frozen scope (reviewer decision 2026-04-20)**: Phase 3 = `orders + order_items + preparation + cancellation C1 + purchases + expenses` **فقط**. Deliveries + invoices + treasury + bonuses settlement + settlements screen مؤجَّلة إلى Phase 4 ولا تُستورَد قبل تعديل صريح للخطة.
+
+**الهدف**: تدفق البيع حتى الجاهزية للتسليم بما فيه multi-item، خصومات، هدايا، VIN، شاشة الإلغاء C1، المتوسط المرجح للمشتريات، التحضير.
 
 **المهام الفنية**:
 1. **`orders` + `order_items`** — كل item: `product_name, category, quantity, unit_price, cost_price (snapshot), recommended_price (snapshot), line_total, discount_type, discount_value, is_gift, vin`.
@@ -305,27 +308,36 @@ No production deployment without T+1h and T+24h monitoring reports.
    - Sellers يرون رسالة `"غير مقبول"` (بدون كشف buy_price).
    - Admin/Manager يرون القيم التفصيلية.
    - التحقق في Zod refine + double-check على server.
-3. **VIN**: حقل `settings.vin_required_categories` (JSON array). VIN مطلوب لكل order_item في هذه الفئات عند POST وعند الانتقال إلى `تم التوصيل`.
+3. **VIN**: حقل `settings.vin_required_categories` (JSON array). VIN مطلوب لكل order_item في هذه الفئات عند POST وعند الانتقال إلى `تم التوصيل` (التحقق الثاني ينفَّذ في Phase 4 عند تسليم).
 4. **Discount engine**: `max_discount_seller_pct=5`, `max_discount_manager_pct=15`, pm/gm بلا سقف. التحقق قبل الحفظ.
 5. **Gift logic**: `is_gift=true` → `unit_price=0, line_total=0`. التحقق أن الكمية ≤ `gift_pool.remaining_quantity` ثم decrement مع `FOR UPDATE`.
-6. **Commission rules**: جدول `product_commission_rules` per-category + fallback إلى settings + override إلى `user_bonus_rates`.
+6. **Commission rules**: جدول `product_commission_rules` per-category + fallback إلى settings + override إلى `user_bonus_rates` (تُقرَأ فقط في Phase 3؛ حساب الـbonus فعلياً في Phase 4).
 7. **Cancellation C1**: 3 خيارات كما في `09_Business_Rules.md` BR-18. Transaction واحدة تُطبِّق:
    - `orders.status = 'ملغي'`
    - `return_to_stock` → UPDATE `products.stock += qty` مع FOR UPDATE
    - `seller_bonus_action`:
      - `keep` → `bonuses.status = 'retained'`
-     - `cancel_unpaid` → DELETE unsettled bonus row
-     - `cancel_as_debt` → INSERT negative settlement row
-   - `driver_bonus_action`: نفس الأنماط
-   - Refund إذا paid_amount > 0 (INSERT `payments` type=refund + signed TVA)
+     - `cancel_unpaid` → **soft-delete لصف bonus** (`deleted_at=NOW(), deleted_by=actor`). ممنوع DELETE SQL (D-04/30_Data_Integrity). إذا لا يوجد أصلاً صف bonus (Phase 3 قبل حساب العمولات) → no-op.
+     - `cancel_as_debt` → INSERT negative settlement row (يمر في Phase 4 عبر screen التسويات؛ في Phase 3 يُسجَّل intent فقط في صف `cancellations`).
+   - `driver_bonus_action`: نفس الأنماط.
+   - Refund إذا paid_amount > 0 (INSERT `payments` type=refund + signed TVA). الدفع غير متاح للـ seller في Phase 3 فعلياً (collections في Phase 4)؛ لكن البنية جاهزة.
    - INSERT `cancellations` audit row
-   - INSERT `activity_log`
-   - Idempotency: رفض إذا `status='ملغي'` مسبقاً (409 `ALREADY_CANCELLED`).
-8. **Purchases + C5 screen**:
-   - `addPurchase` → weighted average update للـ product.buy_price + stock += qty.
-   - `deletePurchase` (C5 screen) → إما refund cash (مسار صندوق) أو supplier credit (مسار دائن).
-9. **Expenses** CRUD.
-10. `activity_log` writes في كل mutation (قبل COMMIT، داخل نفس transaction).
+   - INSERT `activity_log` (hash-chain — helper موحَّد)
+   - Idempotency: رفض إذا `status='ملغي'` مسبقاً (409 `ALREADY_CANCELLED`). الـIdempotency-Key header يحجز صفاً في `idempotency_keys` ضمن نفس transaction.
+8. **Preparation board** (`/preparation` — stock_keeper):
+   - قائمة طلبات `status='محجوز'` جاهزة للتحضير.
+   - `POST /api/v1/orders/[id]/start-preparation` → ينقل إلى `قيد التحضير`.
+   - `POST /api/v1/orders/[id]/mark-ready` → ينقل إلى `جاهز`.
+   - كل انتقال يكتب activity_log + يحترم state-machine في `08_State_Transitions.md`.
+9. **Purchases + C5**:
+   - `POST /api/v1/purchases` (`addPurchase`) → weighted average update للـ product.buy_price + stock += qty + activity_log.
+   - `POST /api/v1/purchases/[id]/reverse` (C5 — **ليس DELETE** لمطابقة 35_API_Endpoints + 30_Data_Integrity) → إما refund cash (مسار صندوق) أو supplier credit (مسار دائن). INSERT صف purchase عكسي أو reversal entries + activity_log.
+   - Soft-delete على purchase row نفسها لا يستبدل الـreverse — المعادلة المالية تمر عبر reversal entries حفاظاً على التدقيق.
+10. **Expenses**:
+    - `GET/POST/PUT /api/v1/expenses` + `/api/v1/expenses/[id]` — **لا DELETE** (D-04).
+    - التصحيح عبر reverse entry سالب منفصل (PUT للسطر الأصلي لا يُستخدم للإلغاء، فقط للتعديل التحريري قبل الاستخدام).
+11. `activity_log` writes في **كل mutation** (قبل COMMIT، داخل نفس transaction، عبر helper `logActivity(tx, …)` يحسب `prev_hash` + `row_hash` — audit.ts line 4).
+12. `idempotency_keys` writes على endpoints التي تقبل `Idempotency-Key` header (create order + cancel + start-preparation + mark-ready + purchase add/reverse + expense create/update) — عبر wrapper على مستوى route يخزّن `endpoint + request_hash + username + response + status_code` — audit.ts line 39.
 
 **المخاطر والمعالجة**:
 - ⚠️ **تعقيد الـ cancellation transaction** → الحل: test coverage قبل الـ UI. 8 invariants توثَّق في `08_State_Transitions.md`.
@@ -334,34 +346,36 @@ No production deployment without T+1h and T+24h monitoring reports.
 - ⚠️ **المستخدم قد يختار `cancel_as_debt` لعمولة غير مصروفة** → الحل: UI يمنع هذا الاختيار إلا إذا `settled=true` (validation server-side كاحتياط).
 
 **بدائل مرفوضة**:
-- حذف rows الطلبات/الفواتير مباشرةً: يكسر التدقيق + يفقد التاريخ المالي.
-- خيارين بدل 3: يفقد حالة الدين الاسترداد — وهي ضرورية محاسبياً لتوثيق دين الموظف بعد صرف عمولة أُلغيت.
+- حذف rows الطلبات/الفواتير/العمولات/المشتريات/المصاريف مباشرةً: يكسر التدقيق + يفقد التاريخ المالي (D-04).
+- خيارين بدل 3 في C1: يفقد حالة الدين الاسترداد — وهي ضرورية محاسبياً لتوثيق دين الموظف بعد صرف عمولة أُلغيت.
+- DELETE على purchases/expenses: يتعارض مع 35_API_Endpoints — الطريقة الكنسية `reverse` للمشتريات و reverse entry سالب للمصاريف.
 
-**Deliverable**: إنشاء طلب 3 أصناف + هدية + خصم 5% (seller) + VIN؛ إلغاء مع كل من 8 invariants (C1–C8) يمر؛ purchase + delete (refund) + delete (supplier credit) تعمل.
+**Deliverable**: إنشاء طلب 3 أصناف + هدية + خصم 5% (seller) + VIN؛ start-preparation + mark-ready يعملان؛ إلغاء مع كل من 8 invariants (C1–C8) يمر (soft-delete للـbonus، لا DELETE)؛ purchase + reverse (refund) + reverse (supplier credit) تعمل؛ expense create/update/no-delete موثَّقة؛ activity_log hash-chain صحيح لكل mutation؛ Idempotency-Key replay يعمل.
 
 ---
 
 ### Phase 4 — التوصيل + الصناديق + الفواتير + العمولات + التسويات — **XXL (12-16 يوم)**
 
-**الهدف**: end-to-end flow من طلب إلى تسوية يومية متوازنة.
+> **Scope (reviewer decision 2026-04-20)**: preparation board نُقل إلى Phase 3. Phase 4 يبدأ من `جاهز` ويغطي التسليم + الفواتير + الصناديق + حساب العمولات الفعلي + التسويات + الأرباح.
+
+**الهدف**: end-to-end flow من طلب جاهز إلى تسوية يومية متوازنة.
 
 **المهام الفنية**:
-1. `/preparation`: Stock Keeper dashboard لنقل `قيد التحضير` → `جاهز`.
-2. `/deliveries` — Driver يؤكد per-item. عند التأكيد `status='تم التوصيل'` → transaction واحدة تُنفِّذ:
+1. `/deliveries` — Driver يؤكد per-item. عند التأكيد `status='تم التوصيل'` → transaction واحدة تُنفِّذ:
    - التحقق من VIN لكل item في فئة VIN-required.
    - INSERT `invoices` (+ atomic `invoice_sequence` counter per month).
    - حساب `calculateBonusInTx` لكل order_item (seller + driver).
    - INSERT `payments` (type='collection'، amount=paid_amount). TVA غير مخزَّنة — محسوبة فقط عند render الفاتورة (D-02).
    - INSERT `treasury_movements` (driver custody inflow).
-   - INSERT `activity_log`.
-3. `/driver-tasks` — كيان جديد. Types: `delivery | supplier_pickup | collection`.
-4. **Driver dashboard**: my tasks + my bonuses.
-5. **Stock keeper dashboard**: preparation queue.
-6. **Hierarchical treasury**:
+   - INSERT `activity_log` (hash-chain).
+2. `/driver-tasks` — كيان جديد. Types: `delivery | supplier_pickup | collection`.
+3. **Driver dashboard**: my tasks + my bonuses.
+4. **Stock keeper dashboard (Phase 4 extension)**: inventory counts + low-stock alerts (preparation queue نفسها في Phase 3).
+5. **Hierarchical treasury**:
    - `treasury_accounts`: types = `main_cash | main_bank | manager_box | driver_custody` مع `parent_account_id`.
    - `treasury_movements`: from/to accounts + category.
    - `/treasury`: balances per account + transfers + daily reconciliation form.
-7. **`/invoices`** — PDF متعدد الأصناف بالفرنسية:
+6. **`/invoices`** — PDF متعدد الأصناف بالفرنسية:
    - Header: logo + ref + date + status pill (3-state: `EN ATTENTE | PARTIELLE | PAYÉE | ANNULÉE`).
    - Parties: Vendeur (SIRET + SIREN + APE + N° TVA) | Client.
    - Lines: Désignation | Qté | Prix Unit. HT | Total HT.
@@ -370,21 +384,21 @@ No production deployment without T+1h and T+24h monitoring reports.
    - Bank block (IBAN/BIC من settings).
    - Stamp: `/stamp.png`.
    - Footer: SIRET | SIREN | APE | ref | contact + timestamp.
-8. **`/settlements`**: bonus payouts + rewards + **negative settlements** (debt from cancel-after-paid). Live credit probe endpoint.
-9. **`/distributions`**: profit-distribution groups مع `pg_advisory_xact_lock(hashtext(period_key))` للحماية من السباقات.
-10. **`/my-bonus`**: per-user bonus list مع filters.
-11. **6 dashboards** per-role:
+7. **`/settlements`**: bonus payouts + rewards + **negative settlements** (debt from cancel-after-paid — intent سُجِّل في Phase 3 ضمن صف `cancellations`؛ Phase 4 يُنشئ صف settlement سالب مقابل). Live credit probe endpoint.
+8. **`/distributions`**: profit-distribution groups مع `pg_advisory_xact_lock(hashtext(period_key))` للحماية من السباقات.
+9. **`/my-bonus`**: per-user bonus list مع filters.
+10. **6 dashboards** per-role:
     - `pm/gm`: P&L (cash + accrual + projected) + alerts
     - `manager`: team performance + cash box status
     - `seller`: own sales + own bonuses (bounded date window)
     - `driver`: own tasks + own bonuses + custody balance
-    - `stock_keeper`: prep queue + low stock alerts
-12. **Reports**: P&L (3 views)، seller performance، profit per order، top clients/suppliers.
-13. **`/api/cron/daily`** (03:00 Europe/Paris، D-23) — يوميّاً واحد مدمج:
+    - `stock_keeper`: inventory variance + low stock alerts
+11. **Reports**: P&L (3 views)، seller performance، profit per order، top clients/suppliers.
+12. **`/api/cron/daily`** (03:00 Europe/Paris، D-23) — يوميّاً واحد مدمج:
     - تذكير `reconciliation` للـ managers/GM.
     - قلب `payment_schedule.status = 'overdue'` للدفعات المتأخرة.
     - cleanup: `activity_log > 90d` + `voice_logs > 30d` + `notifications` المقروءة > 60d + `idempotency_keys` expired + Blob cleanup للمنتجات `active=false > 30d`.
-14. **`/api/cron/hourly`** (D-23) — كل ساعة:
+13. **`/api/cron/hourly`** (D-23) — كل ساعة:
     - prune `voice_rate_limits` windows منتهية.
     - dispatch إشعارات مُؤجَّلة.
 
