@@ -130,6 +130,9 @@ export class CustodyCapExceededError extends BusinessRuleError {
 | `SETTLED_BONUS_SELLER` | لا يمكن إلغاء علاوة البائع لأنها بحالة "{status}" | BR-18 cancel_unpaid refused: bonus row for seller already 'settled' | 409 |
 | `SETTLED_BONUS_DRIVER` | لا يمكن إلغاء علاوة السائق لأنها بحالة "{status}" | BR-18 cancel_unpaid refused: bonus row for driver already 'settled' | 409 |
 | `SETTLEMENT_FLOW_NOT_SHIPPED` | لم يُشحن بعد مسار التسويات (Phase 6) — لا يمكن تحويل علاوة إلى دَين حالياً | BR-18 cancel_as_debt deferred until settlements module ships | 412 |
+| `D35_READINESS_INCOMPLETE` | لا يمكن إصدار فاتورة: مذكرات D-35 الإلزامية ناقصة ({keys}). راجع الإعدادات | confirm-delivery pre-check: one or more of D35_REQUIRED_SETTINGS is missing/empty/placeholder | 412 |
+| `INVOICE_NO_ITEMS` | لا يمكن إصدار فاتورة لطلب بلا أصناف | issueInvoiceInTx: order_items empty (should be unreachable — defense-in-depth) | 409 |
+| `INVOICE_TOTAL_MISMATCH` | اختلال مجاميع الفاتورة | issueInvoiceInTx: sum(line.line_total) ≠ orders.total_amount (defense-in-depth) | 500 |
 | `VIN_REQUIRED` | رقم VIN مطلوب لهذه الفئة ({category}) | vin_required_categories includes {cat}, vin field empty | 400 |
 | `DISCOUNT_OVER_LIMIT` | لا يمكنك منح خصم يتجاوز {limit}% ({req}% مطلوب) | role={role} discount={req}% > max={limit}% | 403 |
 | `PRICE_BELOW_COST` | السعر أقل من سعر الشراء — غير مقبول | sell_price={sp} < buy_price={bp} for product={id} | 400 |

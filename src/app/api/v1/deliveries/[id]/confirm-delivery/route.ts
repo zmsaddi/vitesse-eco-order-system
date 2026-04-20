@@ -47,12 +47,17 @@ export async function POST(request: Request, { params }: Params) {
         requireHeader: "required",
       },
       async (tx) => {
-        const delivery = await confirmDelivery(tx, deliveryId, parsed.data, {
-          userId: claims.userId,
-          username: claims.username,
-          role: claims.role,
-        });
-        return { status: 200, body: { delivery } };
+        const { delivery, invoiceId } = await confirmDelivery(
+          tx,
+          deliveryId,
+          parsed.data,
+          {
+            userId: claims.userId,
+            username: claims.username,
+            role: claims.role,
+          },
+        );
+        return { status: 200, body: { delivery, invoiceId } };
       },
     );
   } catch (err) {

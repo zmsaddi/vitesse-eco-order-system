@@ -14,6 +14,8 @@ import {
   NotFoundError,
 } from "@/lib/api-errors";
 import { logActivity } from "@/lib/activity-log";
+import { validateD35Readiness } from "@/modules/invoices/d35-gate";
+import { issueInvoiceInTx } from "@/modules/invoices/issue";
 import { ensureDriverAssigned } from "./assign";
 import { computeBonusesOnConfirm } from "./bonuses";
 import { deliveryRowToDto } from "./mappers";
@@ -22,6 +24,11 @@ import {
   type DeliveryClaims,
 } from "./permissions";
 import type { ConfirmDeliveryInput, DeliveryDto } from "./dto";
+
+export type ConfirmDeliveryResult = {
+  delivery: DeliveryDto;
+  invoiceId: number;
+};
 
 /** Europe/Paris ISO date string (YYYY-MM-DD) for orders.delivery_date (D-35). */
 function formatParisIsoDate(d: Date): string {
@@ -94,7 +101,12 @@ export async function confirmDelivery(
   id: number,
   input: ConfirmDeliveryInput,
   claims: DeliveryClaims,
-): Promise<DeliveryDto> {
+): Promise<ConfirmDeliveryResult> {
+  // D-35 gate FIRST — before any mutation. If mandatory mentions are missing
+  // the tx rolls back clean: delivery stays "جاري التوصيل", order stays at
+  // its prior status, no payment/bonus/invoice rows written.
+  await validateD35Readiness(tx);
+
   const current = await lockDelivery(tx, id);
 
   // BR-23: self-assign the confirmer if the delivery has no driver yet and the
@@ -269,6 +281,17 @@ export async function confirmDelivery(
     driverUsername: driver.username,
   });
 
+  // 6. Invoice issuance (BR-63). D-35 gate already ran at the top; this insert
+  // cannot surprise us with missing mentions. Same tx → atomic with everything
+  // else above.
+  const issued = await issueInvoiceInTx(tx, {
+    orderId: order.id,
+    deliveryId: id,
+    confirmDate,
+    sellerUsername: order.created_by,
+    driverUsername: driver.username,
+  });
+
   await logActivity(tx, {
     action: "confirm",
     entityType: "deliveries",
@@ -281,6 +304,8 @@ export async function confirmDelivery(
       paymentMethod,
       sellerBonusRows: bonusResult.sellerRowsInserted,
       driverBonusRow: bonusResult.driverRowInserted,
+      invoiceId: issued.id,
+      invoiceRefCode: issued.refCode,
     },
   });
 
@@ -289,5 +314,5 @@ export async function confirmDelivery(
     .from(deliveries)
     .where(eq(deliveries.id, id))
     .limit(1);
-  return deliveryRowToDto(rows[0]);
+  return { delivery: deliveryRowToDto(rows[0]), invoiceId: issued.id };
 }

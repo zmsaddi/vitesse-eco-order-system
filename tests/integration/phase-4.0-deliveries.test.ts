@@ -1,6 +1,12 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq, isNull } from "drizzle-orm";
-import { HAS_DB, TEST_DATABASE_URL, applyMigrations, resetSchema } from "./setup";
+import {
+  D35_SEED_SETTINGS,
+  HAS_DB,
+  TEST_DATABASE_URL,
+  applyMigrations,
+  resetSchema,
+} from "./setup";
 
 // Phase 4.0 — deliveries core + driver-tasks + collection + bonus computation.
 // Exercises the full flow on live Neon: order (جاهز) → delivery (جاهز) → start
@@ -120,6 +126,7 @@ describe.skipIf(!HAS_DB)("Phase 4.0 deliveries + bonuses (requires TEST_DATABASE
         { key: "seller_bonus_fixed", value: "0" },
         { key: "seller_bonus_percentage", value: "0" },
         { key: "driver_bonus_fixed", value: "0" },
+        ...D35_SEED_SETTINGS,
       ];
       for (const s of upserts) {
         await tx

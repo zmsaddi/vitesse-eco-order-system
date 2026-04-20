@@ -54,6 +54,26 @@ loadDotenvLocal();
 export const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL ?? "";
 export const HAS_DB = TEST_DATABASE_URL.length > 0;
 
+// Phase 4.1 — D-35 readiness seed. `confirmDelivery` now validates every key in
+// D35_REQUIRED_SETTINGS at the top of its tx, so any integration test that
+// exercises confirm-delivery must seed these settings in its beforeAll. Each
+// test file composes this alongside its own operational knobs (commission,
+// VAT, etc.) via `settings.onConflictDoUpdate`.
+export const D35_SEED_SETTINGS: ReadonlyArray<{ key: string; value: string }> = [
+  { key: "shop_name", value: "VITESSE ECO SAS" },
+  { key: "shop_legal_form", value: "SAS" },
+  { key: "shop_siret", value: "12345678901234" },
+  { key: "shop_vat_number", value: "FR12345678901" },
+  { key: "shop_address", value: "123 Rue de la Paix" },
+  { key: "shop_city", value: "86000 Poitiers" },
+  { key: "shop_capital_social", value: "10000" },
+  { key: "shop_rcs_city", value: "Poitiers" },
+  { key: "shop_rcs_number", value: "RCS Poitiers 123 456 789" },
+  { key: "shop_iban", value: "FR7610057190010000000000001" },
+  { key: "shop_bic", value: "CMBRFR2BARK" },
+  { key: "vat_rate", value: "20" },
+];
+
 export async function resetSchema(): Promise<void> {
   if (!HAS_DB) return;
   const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 1 });

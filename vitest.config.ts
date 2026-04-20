@@ -47,6 +47,10 @@ export default defineConfig({
         "src/modules/deliveries/service.ts",      // Phase 4.0 — covered entirely by integration tests
         "src/modules/deliveries/assign.ts",       // Phase 4.0.1 — BR-23 self-assign (FOR UPDATE + driver_tasks write)
         "src/modules/orders/cancel-bonuses.ts",   // Phase 4.0.1 — BR-18 bonus-action mutator (FOR UPDATE on bonuses)
+        "src/modules/invoices/d35-gate.ts",       // Phase 4.1 — reads settings table (integration)
+        "src/modules/invoices/issue.ts",          // Phase 4.1 — invoice insert + hash chain + sequence (integration)
+        "src/modules/invoices/pdf.ts",            // Phase 4.1 — pdfkit renderer, binary output (covered by integration PDF endpoint test)
+        "src/modules/invoices/ref-code.ts",       // Phase 4.1 — atomic monthly sequence (integration)
         "src/modules/**/mappers.ts", // Trivial projections — covered via integration
         "src/modules/**/service.ts", // Business logic — covered by integration tests (require DB)
         "src/modules/users/nav.ts",  // Trivial re-export — covered via integration
