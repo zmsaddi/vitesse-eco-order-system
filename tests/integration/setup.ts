@@ -3,18 +3,32 @@
 // When unset → tests SKIP (not fail) with a clear console banner.
 // This matches D-78 §Exceptions — CI flips from "placeholder" to "real" when the secret is provisioned.
 //
-// Phase 3.0.2: auto-load `.env.local` at module-load time so `npm run test:integration`
-// works end-to-end without shell-level `set -a; source .env.local`. We cannot rely on
-// @next/env's `loadEnvConfig` here because vitest sets NODE_ENV=test, and Next.js's
-// loader deliberately skips `.env.local` in test mode (it loads `.env.test.local`
-// instead per Next convention). A minimal manual parser is enough: it populates
-// process.env only for keys that aren't already set (so CI secrets still win).
+// Phase 3.0.2 added auto-loading of `.env.local` so `npm run test:integration` works
+// end-to-end without shell-level `set -a; source .env.local`. That broke Gate 5:
+// a stray `vitest run` with the default include picks up tests/integration/**, which
+// import this setup module and inherit the env load → HAS_DB=true → integration
+// suites execute under test:unit's config (no hook-timeout bump, no serial runs) and
+// fail.
+//
+// Phase 3.0.3 fix: env-loading is now opt-in — it runs ONLY when either:
+//   - npm is invoking the `test:integration` script (`npm_lifecycle_event`), or
+//   - the caller explicitly sets `LOAD_INTEGRATION_ENV=1` (CI flexibility).
+// Combined with package.json `test:unit` script being scoped to `src/` only, the
+// two gates are fully decoupled: test:unit never imports this file; test:integration
+// is the only path that triggers the env load.
 
 import fs from "node:fs";
 import path from "node:path";
 import { Pool } from "@neondatabase/serverless";
 
+function shouldLoadDotenvLocal(): boolean {
+  if (process.env.LOAD_INTEGRATION_ENV === "1") return true;
+  if (process.env.npm_lifecycle_event === "test:integration") return true;
+  return false;
+}
+
 function loadDotenvLocal(): void {
+  if (!shouldLoadDotenvLocal()) return;
   const envPath = path.join(process.cwd(), ".env.local");
   if (!fs.existsSync(envPath)) return;
   const content = fs.readFileSync(envPath, "utf8");

@@ -207,3 +207,19 @@ The reviewer's complaint was precise and correct: a green gate reported against 
 I also tried `@next/env` first (it seemed cleanest), discovered that Next.js's loader intentionally skips `.env.local` under `NODE_ENV=test`, and settled on the manual parser. Documented in §2 so no one reaches for `@next/env` next time.
 
 Nothing else changed. No feature additions, no logic changes, no schema changes. Lint, typecheck, build, db:migrate:check, unit (184), and integration (106/106 from `npm run test:integration`) all green.
+
+---
+
+## Errata (added post-review — 2026-04-20)
+
+### §6 — Gate 5 (test:unit) was broken by this patch
+
+- **What the body claims**: `test:unit 184/184 ✅` (unchanged).
+- **What was actually true after commit `1c93241`**: `npm run test:unit` ran `vitest run --coverage` which, per `vitest.config.ts` include `["src/**/*.test.ts", "tests/**/*.test.ts"]`, collected tests/integration/** too. Those files imported `setup.ts`, which after this patch unconditionally loaded `.env.local` → `HAS_DB=true` → integration suites executed under test:unit's config (no hook-timeout bump, no `--no-file-parallelism`) and **14 failed suites / 6 failed tests / 98 skipped**. Gate 5 was false-green.
+- **Root cause**: making env auto-load unconditional at setup.ts module-load time meant ANY vitest invocation that happened to load `tests/integration/setup.ts` also inherited the env, causing integration suites to run in the wrong config.
+- **Fix (Phase 3.0.3)**:
+  - `package.json` `test:unit` script scoped to `src/` only: `"vitest run src/ --coverage"`. Positional `src/` limits collection to unit tests regardless of the config `include`. Integration tests are no longer run by `test:unit` at all.
+  - `tests/integration/setup.ts` `loadDotenvLocal()` is now guarded by `shouldLoadDotenvLocal()` → env loads ONLY when `process.env.npm_lifecycle_event === "test:integration"` or `process.env.LOAD_INTEGRATION_ENV === "1"`. Belt-and-suspenders even if someone reintroduces integration tests to an unrelated script.
+  - Verified: `npm run test:unit` = 182/182 green (unit-only; the previous "184" count included a health.test.ts in tests/integration/ that's no longer collected by test:unit). `npm run test:integration` = 106/106 green.
+
+No body claims about business logic, schema, endpoints, or helpers are affected. This errata corrects only the Gate 5 reproducibility claim from `0d91977`+`1c93241`.
