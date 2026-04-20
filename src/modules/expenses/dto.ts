@@ -31,12 +31,16 @@ export const CreateExpenseInput = z.object({
 });
 export type CreateExpenseInput = z.infer<typeof CreateExpenseInput>;
 
+// Phase 3.0.1 guard: amount on PUT is strictly positive — sign-changes go through
+// /[id]/reverse (D-82). Without this constraint, a PUT could turn a normal expense
+// into a negative one and bypass the reversal audit trail (reversal_of FK + partial
+// unique + CHECK live only on inserts where reversal_of is set).
 export const UpdateExpenseInput = z
   .object({
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     category: z.string().min(1).max(128).optional(),
     description: z.string().min(1).max(1024).optional(),
-    amount: z.number().optional(), // sign must still satisfy CHECK (negative only if reversal)
+    amount: z.number().positive("المبلغ يجب أن يكون موجباً؛ التصحيح عبر /reverse فقط (D-82)").optional(),
     paymentMethod: z.enum(["كاش", "بنك", "آجل"]).optional(),
     comptableClass: z.string().max(16).nullable().optional(),
     notes: z.string().max(2048).optional(),

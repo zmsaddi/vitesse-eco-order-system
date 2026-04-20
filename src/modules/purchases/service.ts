@@ -15,10 +15,47 @@ import type {
 } from "./dto";
 
 // D-68 + D-69: purchases service.
-// createPurchase → weighted-avg update + stock += qty + activity_log.
-// reversePurchase (C5) → soft-delete original, adjust product.stock/buy_price back,
-//                         adjust supplier credit per reversalPath + activity_log.
-// NO DELETE endpoint (D-04 / 35_API_Endpoints).
+// createPurchase → ref_code `PU-YYYYMMDD-NNNNN` (BR-67) + weighted-avg + stock.
+// reversePurchase (C5) → soft-delete original, adjust stock, adjust supplier credit
+// per reversalPath + activity_log. NO DELETE endpoint (D-04 / 35_API_Endpoints).
+
+/** BR-67 PU-YYYYMMDD-NNNNN, advisory-locked per (prefix, day). */
+async function generatePurchaseRefCode(tx: DbTx): Promise<string> {
+  const prefix = "PU";
+  const today = formatParisDate(new Date());
+  const lockKey = hashTextToInt(prefix + "|" + today);
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(${lockKey})`);
+
+  const res = await tx.execute(sql`
+    SELECT COALESCE(MAX(CAST(SPLIT_PART(ref_code, '-', 3) AS INTEGER)), 0) + 1 AS next
+    FROM purchases
+    WHERE ref_code LIKE ${prefix + "-" + today + "-%"}
+  `);
+  const rows = (res as unknown as { rows?: Array<{ next: number }> }).rows ?? [];
+  const next = rows.length > 0 ? Number(rows[0].next) : 1;
+  return `${prefix}-${today}-${String(next).padStart(5, "0")}`;
+}
+
+function formatParisDate(d: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+    .formatToParts(d)
+    .reduce<Record<string, string>>((acc, p) => {
+      if (p.type !== "literal") acc[p.type] = p.value;
+      return acc;
+    }, {});
+  return `${parts.year}${parts.month}${parts.day}`;
+}
+
+function hashTextToInt(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  return h;
+}
 
 export async function getPurchaseById(
   db: DbHandle,
@@ -85,10 +122,13 @@ export async function createPurchase(
       ? "partial"
       : "pending";
 
+  const refCode = await generatePurchaseRefCode(tx);
+
   // INSERT purchase row.
   const inserted = await tx
     .insert(purchases)
     .values({
+      refCode,
       date: input.date,
       supplierId: input.supplierId,
       supplierNameCached: supplier.name,
@@ -130,6 +170,7 @@ export async function createPurchase(
     action: "create",
     entityType: "purchases",
     entityId: purchaseId,
+    entityRefCode: refCode,
     userId: claims.userId,
     username: claims.username,
     details: {

@@ -37,6 +37,7 @@ export async function POST(request: Request, { params }: Params) {
         const order = await startPreparation(tx, orderId, {
           userId: claims.userId,
           username: claims.username,
+          role: claims.role,
         });
         return { status: 200, body: { order } };
       },

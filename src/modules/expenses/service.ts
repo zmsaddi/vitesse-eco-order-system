@@ -1,7 +1,7 @@
 import { and, asc, count, eq, isNull, sql } from "drizzle-orm";
 import type { DbHandle, DbTx } from "@/db/client";
 import { expenses } from "@/db/schema";
-import { ConflictError, NotFoundError } from "@/lib/api-errors";
+import { BusinessRuleError, ConflictError, NotFoundError } from "@/lib/api-errors";
 import { logActivity } from "@/lib/activity-log";
 import { expenseRowToDto } from "./mappers";
 import type {
@@ -86,6 +86,24 @@ export async function updateExpense(
     .where(and(eq(expenses.id, id), isNull(expenses.deletedAt)))
     .limit(1);
   if (existing.length === 0) throw new NotFoundError(`المصروف رقم ${id}`);
+
+  // Phase 3.0.1 belt-and-suspenders: even if DTO is bypassed (Server Action, manual
+  // call), refuse to set a negative amount on a non-reversal row. Reversal rows
+  // (reversal_of IS NOT NULL) keep their negative amount invariant via DB CHECK;
+  // this guard covers the case of turning a positive row into a negative one via PUT.
+  if (
+    input.amount !== undefined &&
+    input.amount < 0 &&
+    existing[0].reversalOf === null
+  ) {
+    throw new BusinessRuleError(
+      "لا يمكن جعل مصروف عادي مبلغاً سالباً عبر PUT. استخدم /reverse بدلاً من ذلك (D-82).",
+      "CANNOT_NEGATE_VIA_PUT",
+      400,
+      undefined,
+      { id, requestedAmount: input.amount },
+    );
+  }
 
   const patchValues: Partial<typeof expenses.$inferInsert> = {
     updatedBy: claims.username,

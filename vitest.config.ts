@@ -33,7 +33,11 @@ export default defineConfig({
         "src/components/**",     // UI components — covered by E2E + a11y (Phase 1+ once Playwright lands)
         "src/lib/env.ts",        // env var setup — smoke via build + integration
         "src/lib/activity-log.ts",  // D-80 hash-chain — covered by integration (needs DB)
+        "src/lib/hash-chain.ts",    // Shared advisory-locked chain helper — integration only
         "src/lib/idempotency.ts",   // D-79 route wrapper — covered by integration (needs DB)
+        "src/modules/**/permissions.ts", // Role visibility — exercised by integration routes
+        "src/modules/**/ref-code.ts",    // BR-67 numbering — needs live DB for SPLIT_PART + lock
+        "src/modules/**/chain.ts",       // Hash-chain verifiers — test helpers (integration)
         "src/modules/**/mappers.ts", // Trivial projections — covered via integration
         "src/modules/**/service.ts", // Business logic — covered by integration tests (require DB)
         "src/modules/users/nav.ts",  // Trivial re-export — covered via integration

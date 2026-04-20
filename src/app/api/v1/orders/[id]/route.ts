@@ -13,20 +13,16 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function GET(request: Request, { params }: Params) {
   try {
-    await requireRole(request, [
-      "pm",
-      "gm",
-      "manager",
-      "seller",
-      "driver",
-      "stock_keeper",
-    ]);
+    // Phase 3.0.1: role gate at API level excludes driver + stock_keeper (no
+    // delivery-linkage / prep-link visibility available until Phase 4). Service
+    // layer further narrows seller to own-orders only (createdBy).
+    const claims = await requireRole(request, ["pm", "gm", "manager", "seller"]);
     const { id } = await params;
     const orderId = Number(id);
     if (!Number.isFinite(orderId) || orderId < 1) {
       throw new ValidationError("معرِّف الطلب غير صحيح");
     }
-    const order = await withRead(undefined, (db) => getOrderById(db, orderId));
+    const order = await withRead(undefined, (db) => getOrderById(db, orderId, claims));
     return NextResponse.json({ order });
   } catch (err) {
     return apiError(err);

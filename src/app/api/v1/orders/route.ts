@@ -33,6 +33,7 @@ export async function POST(request: Request) {
         const order = await createOrder(tx, parsed.data, {
           userId: claims.userId,
           username: claims.username,
+          role: claims.role,
         });
         return { status: 201, body: { order } };
       },

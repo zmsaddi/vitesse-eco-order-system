@@ -2,16 +2,19 @@ import crypto from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { DbTx } from "@/db/client";
 import { activityLog } from "@/db/schema";
+import {
+  canonicalJSON,
+  computeHashChainLink,
+  HASH_CHAIN_KEYS,
+} from "./hash-chain";
 
-// D-80: activity_log hash-chain write protocol.
-// - pg_advisory_xact_lock(ACTIVITY_LOG_CHAIN_KEY) at the start protects the whole
-//   chain (including the empty-table race that a FOR UPDATE on last row cannot).
-// - Every write goes through logActivity(tx, …). Direct INSERT on activity_log is
-//   forbidden by convention + code review.
-// - Canonical JSON = recursively sorted keys + no whitespace; identical input →
-//   identical hash regardless of JS object insertion order.
+// D-80 (Phase 3.0.1): activity_log write path now delegates the advisory-lock +
+// prev-hash read + row-hash computation to the shared hash-chain helper. Direct
+// INSERT on activity_log is forbidden; same table name + chain key are registered
+// in HASH_CHAIN_KEYS so the helper can hard-verify the call.
 
-export const ACTIVITY_LOG_CHAIN_KEY = 1_000_001;
+// Re-export for callers that prefer the old import path.
+export { canonicalJSON } from "./hash-chain";
 
 export type ActivityAction =
   | "create"
@@ -35,63 +38,37 @@ export type ActivityLogEntry = {
   ipAddress?: string | null;
 };
 
-/**
- * Canonical JSON: object keys sorted lexicographically at every depth.
- * Used so the hash is identical across JS engines/call sites.
- */
-export function canonicalJSON(value: unknown): string {
-  if (value === null || value === undefined) return "null";
-  if (typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return "[" + value.map(canonicalJSON).join(",") + "]";
-  const obj = value as Record<string, unknown>;
-  const keys = Object.keys(obj).sort();
+function canonicalForActivity(entry: ActivityLogEntry, timestampIso: string): string {
   return (
-    "{" +
-    keys.map((k) => JSON.stringify(k) + ":" + canonicalJSON(obj[k])).join(",") +
-    "}"
+    canonicalJSON({
+      action: entry.action,
+      details: entry.details ?? null,
+      entityId: entry.entityId ?? null,
+      entityRefCode: entry.entityRefCode ?? null,
+      entityType: entry.entityType,
+      ipAddress: entry.ipAddress ?? null,
+      userId: entry.userId ?? null,
+      username: entry.username,
+    }) +
+    "|" +
+    timestampIso
   );
-}
-
-function computeRowHash(args: {
-  prevHash: string | null;
-  canonical: string;
-  timestampIso: string;
-}): string {
-  const payload = (args.prevHash ?? "") + "|" + args.canonical + "|" + args.timestampIso;
-  return crypto.createHash("sha256").update(payload, "utf8").digest("hex");
 }
 
 /**
  * Write one activity_log row with a valid hash-chain link.
- * MUST be called inside an open transaction — the caller provides `tx`.
+ * MUST be called inside an open transaction.
  */
 export async function logActivity(tx: DbTx, entry: ActivityLogEntry): Promise<void> {
-  // 1. Chain-wide advisory lock (empty-table race + strict ordering).
-  await tx.execute(sql`SELECT pg_advisory_xact_lock(${ACTIVITY_LOG_CHAIN_KEY})`);
-
-  // 2. Fetch last row_hash (NULL for the very first row).
-  const res = await tx.execute(
-    sql`SELECT row_hash FROM activity_log ORDER BY id DESC LIMIT 1`,
-  );
-  const rows = (res as unknown as { rows?: Array<{ row_hash?: string }> }).rows ?? [];
-  const prevHash: string | null = rows.length > 0 ? rows[0].row_hash ?? null : null;
-
-  // 3. Compute new row_hash off a canonical, deterministic payload + timestamp.
   const now = new Date();
   const timestampIso = now.toISOString();
-  const canonical = canonicalJSON({
-    action: entry.action,
-    details: entry.details ?? null,
-    entityId: entry.entityId ?? null,
-    entityRefCode: entry.entityRefCode ?? null,
-    entityType: entry.entityType,
-    ipAddress: entry.ipAddress ?? null,
-    userId: entry.userId ?? null,
-    username: entry.username,
-  });
-  const rowHash = computeRowHash({ prevHash, canonical, timestampIso });
 
-  // 4. INSERT — timestamp must match the value we hashed against.
+  const { prevHash, rowHash } = await computeHashChainLink(
+    tx,
+    { chainLockKey: HASH_CHAIN_KEYS.activity_log, tableName: "activity_log" },
+    canonicalForActivity(entry, timestampIso),
+  );
+
   await tx.insert(activityLog).values({
     timestamp: now,
     userId: entry.userId ?? null,
@@ -123,9 +100,9 @@ type ActivityLogRow = {
 };
 
 /**
- * Integration test helper — walks every activity_log row in id order and checks:
- *   1. row.prev_hash === prev_row.row_hash (chain continuity)
- *   2. row.row_hash === sha256(prev_hash || canonical(data) || timestamp)
+ * Integration test helper — walks activity_log in id order and verifies:
+ *   1. row.prev_hash === previous row's row_hash (chain continuity).
+ *   2. row.row_hash recomputes from (prev_hash, canonical(data), timestamp).
  * Returns the first corrupt row id, or null if the chain is intact.
  */
 export async function verifyActivityLogChain(tx: DbTx): Promise<number | null> {
@@ -139,23 +116,31 @@ export async function verifyActivityLogChain(tx: DbTx): Promise<number | null> {
   let expectedPrev: string | null = null;
   for (const r of rows) {
     if ((r.prev_hash ?? null) !== expectedPrev) return r.id;
-
     const ts =
       r.timestamp instanceof Date ? r.timestamp.toISOString() : new Date(r.timestamp).toISOString();
-    const canonical = canonicalJSON({
-      action: r.action,
-      details: r.details ?? null,
-      entityId: r.entity_id ?? null,
-      entityRefCode: r.entity_ref_code ?? null,
-      entityType: r.entity_type,
-      ipAddress: r.ip_address ?? null,
-      userId: r.user_id ?? null,
-      username: r.username,
-    });
-    const expected = computeRowHash({ prevHash: r.prev_hash ?? null, canonical, timestampIso: ts });
-    if (expected !== r.row_hash) return r.id;
-
+    const canonical =
+      canonicalJSON({
+        action: r.action,
+        details: r.details ?? null,
+        entityId: r.entity_id ?? null,
+        entityRefCode: r.entity_ref_code ?? null,
+        entityType: r.entity_type,
+        ipAddress: r.ip_address ?? null,
+        userId: r.user_id ?? null,
+        username: r.username,
+      }) +
+      "|" +
+      ts;
+    const expectedRowHash = crypto
+      .createHash("sha256")
+      .update((r.prev_hash ?? "") + "|" + canonical, "utf8")
+      .digest("hex");
+    if (expectedRowHash !== r.row_hash) return r.id;
     expectedPrev = r.row_hash;
   }
   return null;
 }
+
+// Back-compat export of the old constant name; new code should reference
+// HASH_CHAIN_KEYS.activity_log via src/lib/hash-chain.ts.
+export const ACTIVITY_LOG_CHAIN_KEY = HASH_CHAIN_KEYS.activity_log;

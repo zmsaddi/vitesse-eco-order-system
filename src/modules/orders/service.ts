@@ -13,34 +13,41 @@ import {
   NotFoundError,
 } from "@/lib/api-errors";
 import { logActivity } from "@/lib/activity-log";
+import {
+  canonicalJSON,
+  computeHashChainLink,
+  HASH_CHAIN_KEYS,
+} from "@/lib/hash-chain";
 import { orderRowToDto } from "./mappers";
+import { enforceCancelPermission, enforceOrderVisibility, type OrderClaims } from "./permissions";
+import { generateOrderRefCode } from "./ref-code";
 import type {
   CancelOrderInput,
   CreateOrderInput,
   OrderDto,
 } from "./dto";
 
-// Phase 3.0 orders core service. Minimal flow:
-//   - createOrder: validates client + products, computes line_total per item,
-//     inserts order + order_items, writes activity_log.
-//   - getOrderById: fetches order + items (no cross-domain joins — pure orders).
-//   - cancelOrder: C1 transaction (BR-18, partial — bonuses N/A in Phase 3):
-//       * status → 'ملغي' + cancel metadata
-//       * return_to_stock → UPDATE products.stock FOR UPDATE per item
-//       * INSERT cancellations row with the 3 user choices + hash-chain
-//       * bonus_action = keep | cancel_unpaid | cancel_as_debt:
-//           - No bonus rows exist yet (calculated on delivery — Phase 4), so all
-//             three are effectively "intent recorded in cancellations row" here.
-//       * INSERT activity_log
-//   - startPreparation: status transition محجوز → قيد التحضير + activity_log.
+// Phase 3.0.1 — orders core service refactor:
+// - Visibility + cancel permission enforcement split into ./permissions.
+// - ref_code generation split into ./ref-code (BR-67 ORD-YYYYMMDD-NNNNN).
+// - cancellations hash-chain now uses @/lib/hash-chain (advisory-locked).
+// - cancellations chain verifier for tests → ./chain.ts.
 
-export async function getOrderById(db: DbHandle, id: number): Promise<OrderDto> {
+export type { OrderClaims } from "./permissions";
+
+export async function getOrderById(
+  db: DbHandle,
+  id: number,
+  claims: OrderClaims,
+): Promise<OrderDto> {
   const orderRows = await db
     .select()
     .from(orders)
     .where(and(eq(orders.id, id), isNull(orders.deletedAt)))
     .limit(1);
   if (orderRows.length === 0) throw new NotFoundError(`الطلب رقم ${id}`);
+
+  enforceOrderVisibility(orderRows[0], claims);
 
   const items = await db
     .select()
@@ -53,9 +60,8 @@ export async function getOrderById(db: DbHandle, id: number): Promise<OrderDto> 
 export async function createOrder(
   tx: DbTx,
   input: CreateOrderInput,
-  claims: { userId: number; username: string },
+  claims: OrderClaims,
 ): Promise<OrderDto> {
-  // Validate client (active + not soft-deleted).
   const clientRows = await tx
     .select()
     .from(clients)
@@ -66,7 +72,6 @@ export async function createOrder(
   }
   const client = clientRows[0];
 
-  // Validate products + snapshot cost_price per item.
   let totalAmount = 0;
   const itemsToInsert: Array<{
     productId: number;
@@ -96,7 +101,6 @@ export async function createOrder(
     }
     const product = prodRows[0];
     const costPrice = Number(product.buyPrice);
-    // BR-03: unit price must be ≥ cost (gifts exempt — unitPrice=0 forced).
     if (!item.isGift && item.unitPrice < costPrice) {
       throw new BusinessRuleError(
         "سعر البيع أقل من سعر الشراء — غير مقبول.",
@@ -121,10 +125,12 @@ export async function createOrder(
     });
   }
 
-  // INSERT order header.
+  const refCode = await generateOrderRefCode(tx);
+
   const orderInserted = await tx
     .insert(orders)
     .values({
+      refCode,
       date: input.date,
       clientId: input.clientId,
       clientNameCached: client.name,
@@ -140,7 +146,6 @@ export async function createOrder(
     .returning();
   const orderId = orderInserted[0].id;
 
-  // INSERT items — commission_rule_snapshot is NOT NULL in schema; Phase 3.0 stores {} placeholder.
   await tx.insert(orderItems).values(
     itemsToInsert.map((it) => ({
       orderId,
@@ -161,6 +166,7 @@ export async function createOrder(
     action: "create",
     entityType: "orders",
     entityId: orderId,
+    entityRefCode: refCode,
     userId: claims.userId,
     username: claims.username,
     details: {
@@ -170,19 +176,20 @@ export async function createOrder(
     },
   });
 
-  return getOrderById(tx as unknown as DbHandle, orderId);
+  return getOrderById(tx as unknown as DbHandle, orderId, claims);
 }
 
 export async function startPreparation(
   tx: DbTx,
   id: number,
-  claims: { userId: number; username: string },
+  claims: OrderClaims,
 ): Promise<OrderDto> {
-  // Lock the row to serialize concurrent state transitions.
   const lockRes = await tx.execute(
-    sql`SELECT id, status FROM orders WHERE id = ${id} AND deleted_at IS NULL FOR UPDATE`,
+    sql`SELECT id, status, created_by FROM orders WHERE id = ${id} AND deleted_at IS NULL FOR UPDATE`,
   );
-  const rows = (lockRes as unknown as { rows?: Array<{ id: number; status: string }> }).rows ?? [];
+  const rows = (lockRes as unknown as {
+    rows?: Array<{ id: number; status: string; created_by: string }>;
+  }).rows ?? [];
   if (rows.length === 0) throw new NotFoundError(`الطلب رقم ${id}`);
   const current = rows[0];
   if (current.status !== "محجوز") {
@@ -207,20 +214,21 @@ export async function startPreparation(
     details: { transition: "محجوز → قيد التحضير" },
   });
 
-  return getOrderById(tx as unknown as DbHandle, id);
+  return getOrderById(tx as unknown as DbHandle, id, claims);
 }
 
 export async function cancelOrder(
   tx: DbTx,
   id: number,
   input: CancelOrderInput,
-  claims: { userId: number; username: string },
+  claims: OrderClaims,
 ): Promise<OrderDto> {
-  // Lock the order row.
   const lockRes = await tx.execute(
-    sql`SELECT id, status FROM orders WHERE id = ${id} AND deleted_at IS NULL FOR UPDATE`,
+    sql`SELECT id, status, created_by FROM orders WHERE id = ${id} AND deleted_at IS NULL FOR UPDATE`,
   );
-  const rows = (lockRes as unknown as { rows?: Array<{ id: number; status: string }> }).rows ?? [];
+  const rows = (lockRes as unknown as {
+    rows?: Array<{ id: number; status: string; created_by: string }>;
+  }).rows ?? [];
   if (rows.length === 0) throw new NotFoundError(`الطلب رقم ${id}`);
   const current = rows[0];
   if (current.status === "ملغي") {
@@ -231,7 +239,8 @@ export async function cancelOrder(
     );
   }
 
-  // return_to_stock — lock each product row, add quantity back.
+  enforceCancelPermission({ status: current.status, createdBy: current.created_by }, claims);
+
   if (input.returnToStock) {
     const itemRows = await tx
       .select({ productId: orderItems.productId, quantity: orderItems.quantity })
@@ -244,7 +253,6 @@ export async function cancelOrder(
     }
   }
 
-  // Update order status.
   await tx
     .update(orders)
     .set({
@@ -254,31 +262,21 @@ export async function cancelOrder(
     })
     .where(eq(orders.id, id));
 
-  // Bonuses: Phase 3.0 no bonus rows exist (computed on delivery in Phase 4).
-  // Intent recorded in cancellations row below; no DELETE on bonuses anywhere (D-04).
-
-  // INSERT cancellations row (hash-chain also required — using same canonical form
-  // as activity_log for consistency).
-  const { canonicalJSON } = await import("@/lib/activity-log");
-  const crypto = await import("node:crypto");
-  const lastCancRes = await tx.execute(
-    sql`SELECT row_hash FROM cancellations ORDER BY id DESC LIMIT 1`,
-  );
-  const lastCancRows = (lastCancRes as unknown as { rows?: Array<{ row_hash?: string }> }).rows ?? [];
-  const cancPrevHash = lastCancRows.length > 0 ? lastCancRows[0].row_hash ?? null : null;
-  const cancPayload = canonicalJSON({
-    orderId: id,
+  // Cancellations row — hash-chain via shared advisory-locked helper.
+  const cancCanonical = canonicalJSON({
     cancelledBy: claims.username,
+    driverBonusAction: input.driverBonusAction,
+    orderId: id,
     reason: input.reason,
     refundAmount: 0,
     returnToStock: input.returnToStock ? 1 : 0,
     sellerBonusAction: input.sellerBonusAction,
-    driverBonusAction: input.driverBonusAction,
   });
-  const cancRowHash = crypto
-    .createHash("sha256")
-    .update((cancPrevHash ?? "") + "|" + cancPayload, "utf8")
-    .digest("hex");
+  const { prevHash, rowHash } = await computeHashChainLink(
+    tx,
+    { chainLockKey: HASH_CHAIN_KEYS.cancellations, tableName: "cancellations" },
+    cancCanonical,
+  );
 
   await tx.insert(cancellations).values({
     orderId: id,
@@ -290,8 +288,8 @@ export async function cancelOrder(
     driverBonusAction: input.driverBonusAction,
     deliveryStatusBefore: current.status,
     notes: null,
-    prevHash: cancPrevHash,
-    rowHash: cancRowHash,
+    prevHash,
+    rowHash,
   });
 
   await logActivity(tx, {
@@ -309,5 +307,8 @@ export async function cancelOrder(
     },
   });
 
-  return getOrderById(tx as unknown as DbHandle, id);
+  return getOrderById(tx as unknown as DbHandle, id, claims);
 }
+
+// Re-export for tests that used to import from this module.
+export { verifyCancellationsChain } from "./chain";
