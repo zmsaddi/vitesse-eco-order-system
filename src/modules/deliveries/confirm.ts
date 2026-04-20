@@ -14,6 +14,7 @@ import {
   NotFoundError,
 } from "@/lib/api-errors";
 import { logActivity } from "@/lib/activity-log";
+import { ensureDriverAssigned } from "./assign";
 import { computeBonusesOnConfirm } from "./bonuses";
 import { deliveryRowToDto } from "./mappers";
 import {
@@ -21,6 +22,16 @@ import {
   type DeliveryClaims,
 } from "./permissions";
 import type { ConfirmDeliveryInput, DeliveryDto } from "./dto";
+
+/** Europe/Paris ISO date string (YYYY-MM-DD) for orders.delivery_date (D-35). */
+function formatParisIsoDate(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
 
 // Phase 4.0 confirm-delivery flow (extracted to keep service.ts under the
 // ESLint max-lines rule). Encapsulates the full transaction body that runs
@@ -85,19 +96,23 @@ export async function confirmDelivery(
   claims: DeliveryClaims,
 ): Promise<DeliveryDto> {
   const current = await lockDelivery(tx, id);
+
+  // BR-23: self-assign the confirmer if the delivery has no driver yet and the
+  // caller is a driver. Admins with null driver still raise NO_DRIVER_ASSIGNED.
+  const assign = await ensureDriverAssigned(tx, {
+    deliveryId: id,
+    currentAssignedDriverId: current.assigned_driver_id,
+    claims,
+    initialTaskStatus: "in_progress",
+  });
+
+  // Post-assign permission check — drivers may only confirm their own delivery,
+  // admins are unrestricted.
   enforceDeliveryMutationPermission(
-    { assignedDriverId: current.assigned_driver_id },
+    { assignedDriverId: assign.driverUserId },
     claims,
   );
-  if (current.assigned_driver_id === null) {
-    throw new BusinessRuleError(
-      "لا يمكن تأكيد توصيل بلا سائق مُسند.",
-      "NO_DRIVER_ASSIGNED",
-      400,
-      undefined,
-      { deliveryId: id },
-    );
-  }
+
   if (current.status !== "جاري التوصيل") {
     throw new ConflictError(
       `الحالة الحالية للتوصيل "${current.status}" لا تسمح بالتأكيد.`,
@@ -127,6 +142,36 @@ export async function confirmDelivery(
   const order = orderRows[0];
   const paymentMethod = input.paymentMethod ?? order.payment_method;
 
+  // BR-07 + BR-09: cash/bank must be paid in full at delivery; paid can never
+  // exceed the outstanding remaining. 0.005€ tolerance matches BR-09 spec.
+  const totalAmount = Number(order.total_amount);
+  const advancePaid = Number(order.advance_paid);
+  const remaining = totalAmount - advancePaid;
+  if (input.paidAmount > remaining + 0.005) {
+    throw new ConflictError(
+      `المبلغ المدفوع (${input.paidAmount.toFixed(2)}€) يتجاوز المتبقي على الطلب (${remaining.toFixed(2)}€).`,
+      "OVERPAYMENT",
+      { paidAmount: input.paidAmount, remaining, orderId: order.id },
+    );
+  }
+  if (
+    paymentMethod !== "آجل" &&
+    Math.abs(input.paidAmount - remaining) > 0.005
+  ) {
+    throw new BusinessRuleError(
+      `الدفع بـ"${paymentMethod}" يستوجب تسديد المتبقي كاملاً عند التسليم (${remaining.toFixed(2)}€).`,
+      "INCOMPLETE_CASH_PAYMENT",
+      400,
+      undefined,
+      {
+        paymentMethod,
+        paidAmount: input.paidAmount,
+        remaining,
+        orderId: order.id,
+      },
+    );
+  }
+
   const clientRows = await tx
     .select({ id: clients.id, name: clients.name })
     .from(clients)
@@ -134,7 +179,9 @@ export async function confirmDelivery(
     .limit(1);
   const client = clientRows[0];
 
-  const driver = await resolveDriver(tx, current.assigned_driver_id);
+  const driver = assign.selfAssigned
+    ? { id: assign.driverUserId, username: assign.driverUsername }
+    : await resolveDriver(tx, assign.driverUserId);
   const now = new Date();
 
   // 1. Delivery → تم التوصيل.
@@ -149,10 +196,16 @@ export async function confirmDelivery(
     })
     .where(eq(deliveries.id, id));
 
-  // 2. Order → مؤكد.
+  // 2. Order → مؤكد (D-35: delivery_date + confirmation_date filled now).
   await tx
     .update(orders)
-    .set({ status: "مؤكد", updatedBy: claims.username, updatedAt: now })
+    .set({
+      status: "مؤكد",
+      deliveryDate: formatParisIsoDate(now),
+      confirmationDate: now,
+      updatedBy: claims.username,
+      updatedAt: now,
+    })
     .where(eq(orders.id, order.id));
 
   // 3. driver_task → completed.

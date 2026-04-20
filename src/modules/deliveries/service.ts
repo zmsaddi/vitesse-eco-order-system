@@ -12,6 +12,7 @@ import {
   NotFoundError,
 } from "@/lib/api-errors";
 import { logActivity } from "@/lib/activity-log";
+import { ensureDriverAssigned } from "./assign";
 import { deliveryRowToDto } from "./mappers";
 import {
   enforceDeliveryMutationPermission,
@@ -190,19 +191,22 @@ export async function startDelivery(
   if (rows.length === 0) throw new NotFoundError(`التوصيل رقم ${id}`);
   const current = rows[0];
 
+  // BR-23: allow driver self-assign when no driver is set. After this helper
+  // runs, delivery.assigned_driver_id is populated (either pre-existing or just
+  // assigned). Admin roles with null driver trigger NO_DRIVER_ASSIGNED.
+  const assign = await ensureDriverAssigned(tx, {
+    deliveryId: id,
+    currentAssignedDriverId: current.assigned_driver_id,
+    claims,
+    initialTaskStatus: "pending", // task flipped to in_progress below
+  });
+
+  // Permission (post-assign; driver-self always valid now, admin unrestricted).
   enforceDeliveryMutationPermission(
-    { assignedDriverId: current.assigned_driver_id },
+    { assignedDriverId: assign.driverUserId },
     claims,
   );
-  if (current.assigned_driver_id === null) {
-    throw new BusinessRuleError(
-      "لا يمكن بدء التوصيل قبل إسناد سائق.",
-      "NO_DRIVER_ASSIGNED",
-      400,
-      undefined,
-      { deliveryId: id },
-    );
-  }
+
   if (current.status !== "جاهز") {
     throw new ConflictError(
       `الحالة الحالية للتوصيل "${current.status}" لا تسمح بالبدء.`,

@@ -2,6 +2,20 @@
 
 > **Template**: D-78 §5 (13-section).
 > **Type**: Feature tranche — first Phase 4 tranche. Partial operational flow; does NOT authorize a full pilot (no invoice PDF / treasury / settlements yet).
+> **Status**: Superseded by corrective tranche **Phase 4.0.1** (see [`phase-4.0.1-delivery-report.md`](./phase-4.0.1-delivery-report.md)).
+
+---
+
+## 0. Errata (added 2026-04-20 after external review)
+
+External review flagged **4 gaps** between Phase 4.0 code and the spec that had to be fixed before the phase could be considered closed:
+
+1. **CRITICAL — BR-23 self-assign unreachable.** `assignedDriverId` is optional on create, but `startDelivery` / `confirmDelivery` rejected null-driver deliveries with `NO_DRIVER_ASSIGNED`. Per BR-23 the confirmer must be able to become the driver implicitly.
+2. **CRITICAL — BR-07/BR-09 not enforced in confirm-delivery.** Code only enforced `paidAmount ≥ 0`. Cash/bank partial payments and over-collections both passed silently.
+3. **HIGH — D-35 violated.** `orders.delivery_date` + `orders.confirmation_date` were not populated when the order flipped to `مؤكد`.
+4. **HIGH — BR-18 not wired in `cancelOrder`.** Phase 4.0 made bonus rows a live operational fact, but `cancelOrder` only persisted the `(seller_bonus_action, driver_bonus_action)` tuple without applying it to `bonuses`.
+
+All four are addressed in Phase 4.0.1. **Do not treat this report as final** — read it together with the 4.0.1 report.
 
 ---
 

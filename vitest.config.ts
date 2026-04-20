@@ -45,6 +45,8 @@ export default defineConfig({
         "src/modules/deliveries/bonuses.ts",      // Phase 4.0 — bonus computation + inserts (integration)
         "src/modules/deliveries/ref-code.ts",     // Phase 4.0 — BR-67 DL- counter (FOR UPDATE)
         "src/modules/deliveries/service.ts",      // Phase 4.0 — covered entirely by integration tests
+        "src/modules/deliveries/assign.ts",       // Phase 4.0.1 — BR-23 self-assign (FOR UPDATE + driver_tasks write)
+        "src/modules/orders/cancel-bonuses.ts",   // Phase 4.0.1 — BR-18 bonus-action mutator (FOR UPDATE on bonuses)
         "src/modules/**/mappers.ts", // Trivial projections — covered via integration
         "src/modules/**/service.ts", // Business logic — covered by integration tests (require DB)
         "src/modules/users/nav.ts",  // Trivial re-export — covered via integration

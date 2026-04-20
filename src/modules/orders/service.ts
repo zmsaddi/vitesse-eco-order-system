@@ -16,6 +16,7 @@ import {
   computeHashChainLink,
   HASH_CHAIN_KEYS,
 } from "@/lib/hash-chain";
+import { applyBonusActionsOnCancel } from "./cancel-bonuses";
 import {
   acquireOrderCreateLocks,
   assertNoDuplicateVinAcrossOrders,
@@ -311,6 +312,16 @@ export async function cancelOrder(
     rowHash,
   });
 
+  // BR-18: apply bonus actions to any already-materialised bonus rows. For
+  // pre-confirmed cancellations this is a no-op; for confirmed cancellations
+  // it retains, cancels-unpaid, or refuses cancel_as_debt until settlements.
+  const bonusOutcome = await applyBonusActionsOnCancel(tx, {
+    orderId: id,
+    fromStatus: current.status,
+    sellerAction: input.sellerBonusAction,
+    driverAction: input.driverBonusAction,
+  });
+
   await logActivity(tx, {
     action: "cancel",
     entityType: "orders",
@@ -323,6 +334,10 @@ export async function cancelOrder(
       sellerBonusAction: input.sellerBonusAction,
       driverBonusAction: input.driverBonusAction,
       fromStatus: current.status,
+      sellerRowsRetained: bonusOutcome.sellerRowsRetained,
+      sellerRowsCancelled: bonusOutcome.sellerRowsCancelled,
+      driverRowsRetained: bonusOutcome.driverRowsRetained,
+      driverRowsCancelled: bonusOutcome.driverRowsCancelled,
     },
   });
 

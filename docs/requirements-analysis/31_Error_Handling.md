@@ -82,6 +82,7 @@ export class CustodyCapExceededError extends BusinessRuleError {
 | 403 | ممنوع | الدور لا يملك صلاحية |
 | 404 | غير موجود | كيان غير موجود |
 | 409 | تعارض | oversell، دفع زائد، إلغاء مكرَّر |
+| 412 | شرط مسبق مفقود | ميزة مطلوبة لم تُشحن بعد (مثلاً: `SETTLEMENT_FLOW_NOT_SHIPPED`) |
 | 413 | حجم كبير | audio > 10 MB، image > 5 MB |
 | 428 | شرط مسبق مطلوب | cancel بلا bonusActions + bonuses exist |
 | 429 | تجاوز الحد | voice rate limit |
@@ -120,11 +121,15 @@ export class CustodyCapExceededError extends BusinessRuleError {
 | `VALIDATION_FAILED` | البيانات المدخلة غير صحيحة. راجع الحقول المميَّزة | Zod validation failed: {zodIssues} | 400 |
 | `INSUFFICIENT_STOCK` | الكمية المطلوبة ({req}) أكبر من المخزون المتاح ({avail}) | Stock check: product={id} req={req} avail={avail} | 409 |
 | `OVERPAYMENT` | المبلغ ({paid}) أكبر من المتبقي ({remaining}) | Payment {paid} > remaining {remaining} on order {id} | 409 |
+| `INCOMPLETE_CASH_PAYMENT` | الدفع بـ"{method}" يستوجب تسديد المتبقي كاملاً عند التسليم ({remaining}€) | BR-07 enforced in confirm-delivery: non-credit method with paid ≠ remaining | 400 |
+| `NO_DRIVER_ASSIGNED` | لا يمكن المتابعة بلا سائق مُسند. أَسنِد سائقاً أولاً أو دع السائق يتابع بنفسه (BR-23) | BR-23 self-assign helper: delivery has null assigned_driver_id AND caller role ≠ 'driver' | 400 |
+| `NOT_A_DRIVER` | المستخدم {username} ليس سائقاً | Delivery service resolveDriver: target user row has role ≠ 'driver' | 400 |
 | `ALREADY_CANCELLED` | هذا الطلب مُلغى مسبقاً | Order {id} already in cancelled state | 409 |
 | `ALREADY_PAID` | هذا الطلب مدفوع بالكامل | Payment sum matches total within tolerance | 409 |
 | `BONUS_CHOICE_REQUIRED` | يجب اختيار مصير عمولة البائع والسائق قبل الإلغاء | Cancel dialog C1 incomplete: missing bonusActions | 428 |
-| `SETTLED_BONUS_SELLER` | عمولة البائع مصروفة سابقاً. اختر "إلغاء كدين" لخصمها من الدفعة القادمة | settlement_id NOT NULL for seller bonus | 409 |
-| `SETTLED_BONUS_DRIVER` | عمولة السائق مصروفة سابقاً. اختر "إلغاء كدين" لخصمها من الدفعة القادمة | settlement_id NOT NULL for driver bonus | 409 |
+| `SETTLED_BONUS_SELLER` | لا يمكن إلغاء علاوة البائع لأنها بحالة "{status}" | BR-18 cancel_unpaid refused: bonus row for seller already 'settled' | 409 |
+| `SETTLED_BONUS_DRIVER` | لا يمكن إلغاء علاوة السائق لأنها بحالة "{status}" | BR-18 cancel_unpaid refused: bonus row for driver already 'settled' | 409 |
+| `SETTLEMENT_FLOW_NOT_SHIPPED` | لم يُشحن بعد مسار التسويات (Phase 6) — لا يمكن تحويل علاوة إلى دَين حالياً | BR-18 cancel_as_debt deferred until settlements module ships | 412 |
 | `VIN_REQUIRED` | رقم VIN مطلوب لهذه الفئة ({category}) | vin_required_categories includes {cat}, vin field empty | 400 |
 | `DISCOUNT_OVER_LIMIT` | لا يمكنك منح خصم يتجاوز {limit}% ({req}% مطلوب) | role={role} discount={req}% > max={limit}% | 403 |
 | `PRICE_BELOW_COST` | السعر أقل من سعر الشراء — غير مقبول | sell_price={sp} < buy_price={bp} for product={id} | 400 |
