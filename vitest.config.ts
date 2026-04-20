@@ -41,6 +41,10 @@ export default defineConfig({
         "src/modules/orders/pricing.ts",      // BR-03/21/22/35-39/41 — needs live DB (FOR UPDATE, settings, gift_pool)
         "src/modules/orders/preparation.ts",  // Preparation queue — integration-only query module
         "src/modules/orders/locks.ts",        // Phase 3.1.1 FOR UPDATE + cross-order VIN lookup (integration-only)
+        "src/modules/deliveries/confirm.ts",      // Phase 4.0 — confirm-delivery full tx (DB-heavy)
+        "src/modules/deliveries/bonuses.ts",      // Phase 4.0 — bonus computation + inserts (integration)
+        "src/modules/deliveries/ref-code.ts",     // Phase 4.0 — BR-67 DL- counter (FOR UPDATE)
+        "src/modules/deliveries/service.ts",      // Phase 4.0 — covered entirely by integration tests
         "src/modules/**/mappers.ts", // Trivial projections — covered via integration
         "src/modules/**/service.ts", // Business logic — covered by integration tests (require DB)
         "src/modules/users/nav.ts",  // Trivial re-export — covered via integration
