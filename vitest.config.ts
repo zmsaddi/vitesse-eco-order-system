@@ -38,6 +38,9 @@ export default defineConfig({
         "src/modules/**/permissions.ts", // Role visibility — exercised by integration routes
         "src/modules/**/ref-code.ts",    // BR-67 numbering — needs live DB for SPLIT_PART + lock
         "src/modules/**/chain.ts",       // Hash-chain verifiers — test helpers (integration)
+        "src/modules/orders/pricing.ts",      // BR-03/21/22/35-39/41 — needs live DB (FOR UPDATE, settings, gift_pool)
+        "src/modules/orders/preparation.ts",  // Preparation queue — integration-only query module
+        "src/modules/orders/locks.ts",        // Phase 3.1.1 FOR UPDATE + cross-order VIN lookup (integration-only)
         "src/modules/**/mappers.ts", // Trivial projections — covered via integration
         "src/modules/**/service.ts", // Business logic — covered by integration tests (require DB)
         "src/modules/users/nav.ts",  // Trivial re-export — covered via integration

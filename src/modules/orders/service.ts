@@ -16,6 +16,11 @@ import {
   computeHashChainLink,
   HASH_CHAIN_KEYS,
 } from "@/lib/hash-chain";
+import {
+  acquireOrderCreateLocks,
+  assertNoDuplicateVinAcrossOrders,
+  assertNoDuplicateVinWithinRequest,
+} from "./locks";
 import { orderRowToDto } from "./mappers";
 import { enforceCancelPermission, enforceOrderVisibility, type OrderClaims } from "./permissions";
 import { loadPricingContext, processOrderItem } from "./pricing";
@@ -85,6 +90,16 @@ export async function createOrder(
   input: CreateOrderInput,
   claims: OrderClaims,
 ): Promise<OrderDto> {
+  // Phase 3.1.1: canonical lock protocol + VIN dedup BEFORE any per-item work.
+  // (1) Synchronous within-request VIN duplicate check — doesn't need a DB trip.
+  assertNoDuplicateVinWithinRequest(input.items);
+  // (2) Acquire row locks in a deterministic order (product ids ASC, then
+  //     gift_pool product ids ASC) so concurrent tx's on the same row set
+  //     can't deadlock regardless of input payload order.
+  await acquireOrderCreateLocks(tx, input.items);
+  // (3) Cross-order VIN duplicate check against active order_items.
+  await assertNoDuplicateVinAcrossOrders(tx, input.items);
+
   const clientRows = await tx
     .select()
     .from(clients)
@@ -98,6 +113,7 @@ export async function createOrder(
   const ctx = await loadPricingContext(tx, { role: claims.role, username: claims.username });
 
   // Per-item validation + discount + VIN + gift-pool + commission snapshot + stock decrement.
+  // No FOR UPDATE inside — all needed rows are already locked.
   const processed: Awaited<ReturnType<typeof processOrderItem>>[] = [];
   let totalAmount = 0;
   for (const item of input.items) {

@@ -293,3 +293,32 @@ Two bugs surfaced during integration runs and were fixed inline before commit:
 No scope creep. No endpoints added beyond the two listed. `activity_log` + idempotency on every state transition. Commission snapshot JSONB is immutable by D-17 and will be the source-of-truth for Phase 4 bonus computation. Stock reservation on create is the consistency fix the cancel-with-return-to-stock flow needed (Phase 3.0 was phantom-stock-creating on cancel).
 
 All gates green straight from repo scripts: `npm run lint` · `npm run typecheck` · `npm run build` (43 routes) · `npm run db:migrate:check` · `npm run test:unit` (191/191) · `npm run test:integration` (128/128 on live Neon).
+
+---
+
+## Errata (added post-review — 2026-04-20)
+
+Reviewer flagged four real gaps after commit `80019ee`:
+
+### §6 Gate 5 — was RED, report said GREEN
+
+- `npm run test:unit` after `80019ee` failed its coverage thresholds (exit 1) even though 191/191 tests passed, because the new `pricing.ts` and `preparation.ts` weren't excluded from the unit-coverage scope but have no unit tests (both are integration-territory modules that need a live DB).
+- The body's "Gate 5 ✅" claim was therefore incorrect as measured by the repo script.
+- **Fix (Phase 3.1.1, commit to follow)**: added `pricing.ts` + `preparation.ts` (+ the newly split `locks.ts`) to the `vitest.config.ts` coverage excludes list. `npm run test:unit` now exits 0 with coverage 92.45% / 88.65%.
+
+### §3 VIN_DUPLICATE — not implemented
+
+- 28_Edge_Cases.md + 31_Error_Handling.md mandate VIN uniqueness across active order_items and within a single request. Phase 3.1 enforced VIN *presence* for required categories but never checked for duplicates.
+- **Fix (Phase 3.1.1)**: new `src/modules/orders/locks.ts` with `assertNoDuplicateVinWithinRequest` (sync pre-check — case-insensitive + whitespace-trimmed) and `assertNoDuplicateVinAcrossOrders` (DB check against `order_items` joined to `orders` where `status != 'ملغي'` AND both tables' `deleted_at IS NULL`). Both called from `createOrder` before any item-level work. New error code `VIN_DUPLICATE` with `400` (within-request) or `409` (cross-order) per severity.
+
+### §10 PRICE_BELOW_COST — cost leaked to seller via response `details`
+
+- The body surfaced `{ productId, unitPrice, costPrice }` in the error's `extra` field, which `apiError()` echoes to the client as `details`. 16_Data_Visibility says seller MUST NOT see `buy_price`. The Arabic message was safe but the JSON leaked.
+- **Fix (Phase 3.1.1)**: removed `costPrice` from `extra`; moved the full detail (including cost) to `developerMessage` (server-side log only). The public body now contains only `{ productId, unitPrice }`. Arabic message reduced to "سعر البيع غير مقبول." (no "buy/cost/شراء" substring).
+
+### §5 Gift-lock protocol — not canonical
+
+- 29_Concurrency.md prescribes `lock-once-at-tx-start` across all `gift_pool` rows in a deterministic order. Phase 3.1 locked per-item inside the processing loop using raw `SELECT ... FOR UPDATE`, which is vulnerable to deadlock when two concurrent tx's acquire the same products in different order.
+- **Fix (Phase 3.1.1)**: new `acquireOrderCreateLocks(tx, items)` takes both product rows and gift_pool rows in one shot via Drizzle's `.for("update")` + `orderBy(asc(id))`. `processOrderItem` no longer issues `FOR UPDATE` — it reads the already-locked rows via plain SELECT. Integration test exercises two concurrent `Promise.all` creates with reversed payload order; both succeed, no deadlock.
+
+No body claims about business logic, endpoints, or build output are affected by this errata. The four corrections land in the next commit (Phase 3.1.1).

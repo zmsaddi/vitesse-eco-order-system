@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { DbTx } from "@/db/client";
 import {
   giftPool,
@@ -198,31 +198,34 @@ async function buildCommissionSnapshot(
 }
 
 /**
- * Validate + compute one order item. Side-effects (callers must observe):
- *   - Product stock is NOT decremented here; caller does it per row under FOR UPDATE.
- *   - Gift pool IS decremented here under FOR UPDATE (atomic with the gift-quantity check).
+ * Validate + compute one order item. Callers MUST have already acquired the
+ * canonical row-locks via `acquireOrderCreateLocks()` in ./locks before calling
+ * this. The lock ordering there (product ids ascending, then gift_pool product
+ * ids ascending) is what makes the create path deadlock-free regardless of
+ * per-request item order (29_Concurrency.md — one-shot lock at tx start).
+ *
+ * This function issues only plain SELECT/UPDATE on rows that are already held
+ * under transaction-scoped exclusive locks — no FOR UPDATE here.
  */
 export async function processOrderItem(
   tx: DbTx,
   ctx: PricingContext,
   input: CreateOrderItemInput,
 ): Promise<ProcessedItemRow> {
-  // Lock the product row first (used for recommended price + cost + stock guard).
-  const lockRes = await tx.execute(
-    sql`SELECT id, name, category, buy_price, sell_price, stock, active
-        FROM products WHERE id = ${input.productId} FOR UPDATE`,
-  );
-  const prodRows = (lockRes as unknown as {
-    rows?: Array<{
-      id: number;
-      name: string;
-      category: string;
-      buy_price: string;
-      sell_price: string;
-      stock: string;
-      active: boolean;
-    }>;
-  }).rows ?? [];
+  // Row already locked by the pre-flight acquireOrderCreateLocks().
+  const prodRows = await tx
+    .select({
+      id: products.id,
+      name: products.name,
+      category: products.category,
+      buyPrice: products.buyPrice,
+      sellPrice: products.sellPrice,
+      stock: products.stock,
+      active: products.active,
+    })
+    .from(products)
+    .where(eq(products.id, input.productId))
+    .limit(1);
   if (prodRows.length === 0 || !prodRows[0].active) {
     throw new BusinessRuleError(
       `المنتج رقم ${input.productId} غير موجود أو معطَّل.`,
@@ -233,8 +236,8 @@ export async function processOrderItem(
     );
   }
   const product = prodRows[0];
-  const recommended = Number(product.sell_price);
-  const cost = Number(product.buy_price);
+  const recommended = Number(product.sellPrice);
+  const cost = Number(product.buyPrice);
   const currentStock = Number(product.stock);
 
   // VIN first (category-level gate — applies whether or not the item is a gift).
@@ -249,13 +252,14 @@ export async function processOrderItem(
     );
   }
 
-  // Gift pool check + decrement (BR-35/36) — BEFORE stock guard so a gift with
-  // insufficient pool surfaces the more specific GIFT_POOL_INSUFFICIENT error.
+  // Gift pool check + decrement (BR-35/36) — gift_pool row pre-locked by
+  // acquireOrderCreateLocks(). Check quantity; decrement atomically.
   if (input.isGift) {
-    const poolLock = await tx.execute(
-      sql`SELECT id, quantity FROM gift_pool WHERE product_id = ${input.productId} FOR UPDATE`,
-    );
-    const poolRows = (poolLock as unknown as { rows?: Array<{ id: number; quantity: string }> }).rows ?? [];
+    const poolRows = await tx
+      .select({ id: giftPool.id, quantity: giftPool.quantity })
+      .from(giftPool)
+      .where(eq(giftPool.productId, input.productId))
+      .limit(1);
     if (poolRows.length === 0) {
       throw new BusinessRuleError(
         `المنتج ${product.name} غير مخصَّص للإهداء (لا يوجد في gift_pool).`,
@@ -306,14 +310,16 @@ export async function processOrderItem(
         { role: ctx.role, discountPct, capPct: cap, productId: input.productId },
       );
     }
-    // BR-03: post-discount unit ≥ cost.
+    // BR-03: post-discount unit ≥ cost. NEVER leak cost in the public error
+    // body (16_Data_Visibility: seller cannot see buy_price). Only productId +
+    // attempted unitPrice are surfaced; the cost delta stays server-side.
     if (unit < cost) {
       throw new BusinessRuleError(
-        "سعر البيع أقل من سعر الشراء — غير مقبول.",
+        "سعر البيع غير مقبول.",
         "PRICE_BELOW_COST",
         400,
-        undefined,
-        { productId: input.productId, unitPrice: unit, costPrice: cost },
+        `unit=${unit} < cost=${cost} for productId=${input.productId}`,
+        { productId: input.productId, unitPrice: unit },
       );
     }
   }
@@ -321,8 +327,7 @@ export async function processOrderItem(
   const lineTotal = input.isGift ? 0 : round2(input.quantity * unit);
   const commissionRuleSnapshot = await buildCommissionSnapshot(tx, ctx, product.category);
 
-  // Decrement product stock (BR-38 — gifts too, "مثل أي صنف"). Kept under the
-  // same FOR UPDATE taken above.
+  // Decrement product stock (BR-38 — gifts too, "مثل أي صنف").
   await tx
     .update(products)
     .set({ stock: (currentStock - input.quantity).toFixed(2) })
