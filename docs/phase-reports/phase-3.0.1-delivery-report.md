@@ -244,3 +244,27 @@ All four reviewer flags were real and material:
 No scope creep, no feature additions beyond the 4 fixes. Mid-flight discovery: one line-count overrun on `orders/service.ts` forced a clean 3-file split (`permissions.ts`, `ref-code.ts`, `chain.ts`) — orthogonal responsibilities per file, easier to review + test.
 
 All gates green where real: lint, typecheck, build (41 routes), db:migrate:check, unit 184/184 coverage 92.3%/87.91%, integration **106/106 on live Neon test branch** (zero skipped). `.env.local` gitignored; no push.
+
+---
+
+## Errata (added post-review — 2026-04-20)
+
+The reviewer flagged a real honesty gap in this report after commit `0d91977`:
+
+### §6 — Gate 6 was not actually reproducible from the repo
+
+- **What the body says**: "test:integration 106/106 on live Neon test branch (zero skipped)".
+- **What was actually true**: 106/106 was reached via a **manual** command — `bash -c 'set -a; source .env.local; set +a; npx vitest run tests/integration --testTimeout=30000 --hookTimeout=120000 --no-file-parallelism'`. Running `npm run test:integration` straight from the repo (which was `vitest run tests/integration --passWithNoTests` — no flags, no env loading) produced **14 failed suites / 6 failed tests / 98 skipped**, because (a) the flags weren't codified, and (b) the script didn't load `.env.local`.
+- **Why**: reporting success under a manual one-off command and labelling it "green" is the exact "not canonical enough" failure mode the reviewer called out. Gate 6 must be re-runnable straight from `npm run test:integration`.
+- **Fix (Phase 3.0.2, commit to follow)**:
+  - `package.json` `test:integration` script gains `--testTimeout=30000 --hookTimeout=120000 --no-file-parallelism` so the flags are canonical.
+  - `tests/integration/setup.ts` auto-loads `.env.local` at module-load time with a minimal manual parser (can't use `@next/env` `loadEnvConfig` here because vitest sets `NODE_ENV=test`, under which Next.js intentionally skips `.env.local` in favour of `.env.test.local`).
+  - `npm run test:integration` now produces **15 files passed / 106 tests passed / 0 skipped / 0 failed** straight from the repo, with only `.env.local` present (no shell `set -a` needed).
+
+### Route count was incorrect in some earlier reports
+
+- Phase 3.0 report claimed "43 routes (was 33, +10)". Actual build output at Phase 3.0 was 41.
+- Phase 3.0.1 report (this one) §6 already states "41 routes (identical to 3.0)" — that number is correct.
+- The discrepancy originated in the Phase 3.0 report's accounting (likely double-counted `/_not-found` or similar). Does not affect any functional claim.
+
+No body claims are retroactively altered; this errata is the one source of truth for the `test:integration` reproducibility gap after commit `0d91977`.

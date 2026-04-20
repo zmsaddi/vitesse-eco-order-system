@@ -2,8 +2,40 @@
 // Pattern: tests that need live Postgres read `TEST_DATABASE_URL`.
 // When unset → tests SKIP (not fail) with a clear console banner.
 // This matches D-78 §Exceptions — CI flips from "placeholder" to "real" when the secret is provisioned.
+//
+// Phase 3.0.2: auto-load `.env.local` at module-load time so `npm run test:integration`
+// works end-to-end without shell-level `set -a; source .env.local`. We cannot rely on
+// @next/env's `loadEnvConfig` here because vitest sets NODE_ENV=test, and Next.js's
+// loader deliberately skips `.env.local` in test mode (it loads `.env.test.local`
+// instead per Next convention). A minimal manual parser is enough: it populates
+// process.env only for keys that aren't already set (so CI secrets still win).
 
+import fs from "node:fs";
+import path from "node:path";
 import { Pool } from "@neondatabase/serverless";
+
+function loadDotenvLocal(): void {
+  const envPath = path.join(process.cwd(), ".env.local");
+  if (!fs.existsSync(envPath)) return;
+  const content = fs.readFileSync(envPath, "utf8");
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (!m) continue;
+    const key = m[1];
+    let value = m[2];
+    // Strip surrounding quotes if present.
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+}
+loadDotenvLocal();
 
 export const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL ?? "";
 export const HAS_DB = TEST_DATABASE_URL.length > 0;
