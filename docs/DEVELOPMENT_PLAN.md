@@ -1,7 +1,7 @@
 # خطة التطوير — Development Plan
 
-> **آخر تحديث**: 2026-04-19
-> **الحالة**: Phase 0a + 0b + **0c** مكتملة. Phase 0 (الكود) **معلَّقة لتأكيد "ابدأ"**. **78 قراراً** (D-01..D-78). **D-77 + D-78 = Delivery Acceptance Framework**: 13-gate CI، 13-section report، T+1h/T+24h monitoring، KPIs (zero tolerance).
+> **آخر تحديث**: 2026-04-20
+> **الحالة**: Phase 0..3 **مغلقة** (Phase 3 closing baseline = `0151b0f`). **82 قراراً** (D-01..D-82). Phase 4 (deliveries + invoices + treasury + bonuses settlement) معلَّقة لتأكيد "ابدأ". **D-77 + D-78 = Delivery Acceptance Framework**: 13-gate CI، 13-section report، T+1h/T+24h monitoring، KPIs (zero tolerance). الإقفال ليس إذناً بنشر إنتاجي — Phase 4 شرط ضروري لـ pilot تشغيلي كامل.
 > **النوع**: مشروع جديد بالكامل (fresh build)
 > **المواصفات**: [requirements-analysis/](requirements-analysis/)
 > **القرارات الحاكمة**: [requirements-analysis/00_DECISIONS.md](requirements-analysis/00_DECISIONS.md) — **78 قراراً** فاصلاً (D-01..D-78)
@@ -296,8 +296,9 @@ No production deployment without T+1h and T+24h monitoring reports.
 
 ---
 
-### Phase 3 — الطلبات متعددة الأصناف + الإلغاء + التحضير + المشتريات + المصاريف — **XXL (12-16 يوم)**
+### Phase 3 — الطلبات متعددة الأصناف + الإلغاء + التحضير + المشتريات + المصاريف — **XXL (12-16 يوم)** — **✅ Closed (2026-04-20)**
 
+> **Closing baseline**: `0151b0f`. Full gate evidence + non-blockers: [`docs/phase-reports/phase-3-closure-report.md`](phase-reports/phase-3-closure-report.md).
 > **Frozen scope (reviewer decision 2026-04-20)**: Phase 3 = `orders + order_items + preparation + cancellation C1 + purchases + expenses` **فقط**. Deliveries + invoices + treasury + bonuses settlement + settlements screen مؤجَّلة إلى Phase 4 ولا تُستورَد قبل تعديل صريح للخطة.
 
 **الهدف**: تدفق البيع حتى الجاهزية للتسليم بما فيه multi-item، خصومات، هدايا، VIN، شاشة الإلغاء C1، المتوسط المرجح للمشتريات، التحضير.
