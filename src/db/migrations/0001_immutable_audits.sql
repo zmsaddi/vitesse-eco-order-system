@@ -59,10 +59,13 @@ CREATE TRIGGER invoice_lines_no_update
 --    computation for verification queries without reimplementing
 --    logic in app code.
 -- ═══════════════════════════════════════════════════════════
+
+-- Enable pgcrypto for digest() — Neon Free tier supports it.
+-- MUST come BEFORE the function below: Postgres type-checks SQL
+-- function bodies at CREATE time, so digest() must already exist.
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 CREATE OR REPLACE FUNCTION compute_row_hash(prev_hash TEXT, canonical_data TEXT)
   RETURNS TEXT AS $$
   SELECT encode(digest(convert_to(COALESCE(prev_hash, '') || canonical_data, 'UTF8'), 'sha256'), 'hex');
 $$ LANGUAGE SQL IMMUTABLE;
-
--- Enable pgcrypto for digest() — Neon Free tier supports it.
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
