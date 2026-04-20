@@ -238,3 +238,26 @@ Reviewer was precise on all three points:
 3. Product locks didn't serialize two tx's whose product sets were disjoint. An advisory lock keyed on the normalized VIN is the minimal guarantee that matches the existing advisory-lock pattern used elsewhere in the codebase (activity_log chain, cancellations chain, idempotency keys, refCode). Integration test with `Promise.all` on disjoint products + same VIN now produces `[201, 409]` deterministically.
 
 All 24 unit files / 202 tests + 18 integration files / 142 tests pass, exit 0, straight from `npm run test:unit` and `npm run test:integration`. No shell tricks. No push.
+
+---
+
+## Errata (added post-review — 2026-04-20)
+
+Reviewer flagged one material gap and one doc-drift issue after commit `49dc0f2`:
+
+### §2 Fix 1 (cost-leak redaction) — commissionRuleSnapshot still leaked
+
+- Phase 3.1.2 redaction stripped only `costPrice`. It did NOT touch `commissionRuleSnapshot`, which is a JSONB that includes `driver_fixed_per_delivery` (and `seller_pct_overage`). Per 15_Roles_Permissions.md + 16_Data_Visibility.md, "عمولات الآخرين" = ❌ for seller/driver/stock_keeper. The unit test at `redaction.test.ts:74` even explicitly asserted that seller still saw the full snapshot — effectively cementing the leak.
+- **Fix (Phase 3.1.3, commit to follow)**: `redactItemForRole` now filters the snapshot per role:
+  - `seller` → only `{ source, captured_at, seller_fixed_per_unit, seller_pct_overage }`.
+  - `driver` → only `{ source, captured_at, driver_fixed_per_delivery }`.
+  - `stock_keeper` → snapshot stripped entirely (no commission standing).
+  - `pm/gm/manager` → full snapshot preserved.
+  `OrderItemDto.commissionRuleSnapshot` became `.optional()` so stock_keeper strip is type-valid. Unit + integration tests extended.
+
+### §8 VIN_DUPLICATE doc drift
+
+- `31_Error_Handling.md` documented `VIN_DUPLICATE` as 400 only. Phase 3.1.1 made it dual-status (400 within-request + 409 cross-order) without updating the doc.
+- **Fix (Phase 3.1.3)**: `31_Error_Handling.md` now carries two rows for `VIN_DUPLICATE` — one 400 (within request) and one 409 (cross-order active), each with its own Arabic message + trigger description.
+
+No body claims about endpoints, migrations, or build output are affected. The corrections land in commit **(Phase 3.1.3)**.

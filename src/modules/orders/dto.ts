@@ -23,7 +23,11 @@ export const OrderItemDto = z.object({
   lineTotal: z.number(),
   isGift: z.boolean(),
   vin: z.string().default(""),
-  commissionRuleSnapshot: z.record(z.string(), z.unknown()),
+  // Phase 3.1.3: optional because stock_keeper has no commission standing and
+  // the field is stripped entirely in their response. For seller + driver the
+  // snapshot is PARTIALLY filtered (only role-relevant keys) in
+  // redactOrderForRole. Internal callers (mapper) always populate it.
+  commissionRuleSnapshot: z.record(z.string(), z.unknown()).optional(),
 });
 export type OrderItemDto = z.infer<typeof OrderItemDto>;
 

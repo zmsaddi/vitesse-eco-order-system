@@ -135,7 +135,8 @@ export class CustodyCapExceededError extends BusinessRuleError {
 | `IDEMPOTENCY_KEY_REQUIRED` | خطأ فني — تواصل مع الدعم إن تكرر | Endpoint requires Idempotency-Key header (D-16/D-79) | 400 |
 | `IDEMPOTENCY_KEY_MISMATCH` | تم إرسال نفس الطلب مرتين. افتح الصفحة مجدداً وأعد المحاولة | key={k} endpoint={e} request_hash mismatch (D-79) | 409 |
 | `IDEMPOTENCY_KEY_OWNER_MISMATCH` | خطأ فني — تواصل مع الدعم إن تكرر | key={k} endpoint={e} already used by different username (D-79) | 409 |
-| `VIN_DUPLICATE` | رقم VIN ({vin}) مُستخدَم على منتج آخر غير ملغى | VIN {vin} found on active order_item {id} | 400 |
+| `VIN_DUPLICATE` | رقم VIN ({vin}) مكرَّر داخل نفس الطلب | Same VIN used twice on different items in a single POST (Phase 3.1.1) | 400 |
+| `VIN_DUPLICATE` | رقم VIN ({vin}) مُستخدَم على طلب آخر نشط | VIN {vin} found on active order_item {id} (order not cancelled/deleted) — Phase 3.1.1 | 409 |
 | `SKU_LIMIT_REACHED` | وصلت الحد الأقصى للمنتجات النشطة ({limit}). عطِّل منتجاً قبل إضافة جديد | COUNT(products WHERE active=true) >= {limit} | 400 |
 | `MAX_IMAGES_REACHED` | لا يمكن إضافة أكثر من {max} صور لكل منتج | product_images count for product_id={id} >= {max} | 400 |
 | `CUSTODY_CAP_EXCEEDED` | تجاوزت السقف النقدي. سلِّم الأموال لمديرك أولاً | driver_custody.balance+new={total} > cap={cap} | 409 |
