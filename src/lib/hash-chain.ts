@@ -14,6 +14,7 @@ export const HASH_CHAIN_KEYS = {
   activity_log: 1_000_001,
   cancellations: 1_000_002,
   invoices: 1_000_003,
+  invoice_lines: 1_000_004,
 } as const;
 
 // Tables permitted to participate in a hash chain. Hard-coded to prevent

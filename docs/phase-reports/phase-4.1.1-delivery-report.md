@@ -2,6 +2,18 @@
 
 > **Template**: D-78 §5 (13-section).
 > **Type**: Required corrective tranche for Phase 4.1 — closes three reviewer findings: under-specified D-35 gate, PDF reading vendor data live, and missing Payment history section.
+> **Status**: Superseded by **Phase 4.1.2** for the hash-chain completeness gap. See [`phase-4.1.2-delivery-report.md`](./phase-4.1.2-delivery-report.md).
+
+---
+
+## 0. Errata (added 2026-04-21 after external review)
+
+Two anti-fraude gaps surfaced after 0cf8efe committed:
+
+1. **CRITICAL — invoices.row_hash canonical was a subset.** The Phase 4.1.1 `canonical` input included only `vendorSiret` + `paymentsCount` from the new frozen columns. Tampering with any OTHER field inside `vendor_snapshot` (e.g. `shopIban`, `shopPenaltyRateAnnual`) or any element inside `payments_history` (e.g. an `amount`) would NOT change `row_hash` — so the chain would happily verify on a corrupt row. This contradicts D-37 which mandates `canonical(row_data)`, not a hand-picked subset.
+2. **HIGH — `invoice_lines` not on hash-chain.** D-37 calls out both `invoices` AND `invoice_lines` in the canonical spec. Phase 4.1.1 left lines protected only by the D-58 immutability trigger — no `prev_hash`/`row_hash` columns, no chain-level detection of frozen-field tampering on individual lines.
+
+Both resolved in Phase 4.1.2. Read this report together with the 4.1.2 report.
 
 ---
 

@@ -57,6 +57,13 @@
       "when": 1776717442781,
       "tag": "0007_invoice_frozen_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1776722208225,
+      "tag": "0008_invoice_lines_hash_chain",
+      "breakpoints": true
     }
   ]
 }

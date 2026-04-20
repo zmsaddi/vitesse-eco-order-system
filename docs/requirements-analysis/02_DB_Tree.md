@@ -514,9 +514,12 @@ CHECK (key IN (
 | ht_amount_frozen | NUMERIC(19,2) | NOT NULL |
 | is_gift | BOOLEAN | DEFAULT false |
 | vin_frozen | TEXT | DEFAULT '' |
+| prev_hash | TEXT | NULL للسطر الأول في سلسلة `invoice_lines`، hex(sha256) لاحقاً (D-37 — Phase 4.1.2) |
+| row_hash | TEXT | NOT NULL DEFAULT '' (الـDEFAULT bootstrap migration hack فقط؛ كل سطر يُدرَج عبر `issueInvoiceInTx` يحمل hex(sha256) فعلياً) — D-37 Phase 4.1.2 |
 
 **UNIQUE**: `(invoice_id, line_number)`
 **ملاحظة**: immutable — trigger `reject_mutation()` يمنع UPDATE.
+**ملاحظة (D-37)**: سلسلة hash-chain مستقلّة على `invoice_lines` (مفتاح advisory `HASH_CHAIN_KEYS.invoice_lines = 1_000_004`)؛ `canonical` كل سطر يشمل كل الحقول المجمّدة: `invoiceId`, `lineNumber`, `productNameFrozen`, `quantity`, `unitPriceTtcFrozen`, `lineTotalTtcFrozen`, `vatRateFrozen`, `vatAmountFrozen`, `htAmountFrozen`, `isGift`, `vinFrozen`. حقول السطر نفسها تُضمَّن أيضاً في canonical الفاتورة الأم (مصفوفة `lines`) فأي تلاعب بحقل مجمّد على سطر يُكتشف مرّتين: في `verifyInvoiceLinesChain` و`verifyInvoicesChain`.
 
 ---
 

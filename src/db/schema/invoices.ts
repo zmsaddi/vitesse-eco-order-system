@@ -75,7 +75,8 @@ export const invoices = pgTable(
   ],
 );
 
-// Table 18b: invoice_lines (D-30 — frozen line snapshot, immutable via D-58 trigger)
+// Table 18b: invoice_lines (D-30 — frozen line snapshot, immutable via D-58 trigger
+// + D-37 per-line hash chain since Phase 4.1.2)
 export const invoiceLines = pgTable(
   "invoice_lines",
   {
@@ -93,6 +94,12 @@ export const invoiceLines = pgTable(
     htAmountFrozen: numeric("ht_amount_frozen", { precision: 19, scale: 2 }).notNull(),
     isGift: boolean("is_gift").notNull().default(false),
     vinFrozen: text("vin_frozen").default(""),
+    // D-37 per-line hash chain (Phase 4.1.2). The empty-string default is a
+    // bootstrap migration compromise: every row inserted by issueInvoiceInTx
+    // carries a real sha256 hex + linked prev_hash. An integration test
+    // explicitly asserts no row produced by the app has an empty row_hash.
+    prevHash: text("prev_hash"),
+    rowHash: text("row_hash").notNull().default(""),
   },
   (t) => [unique("invoice_lines_invoice_line_unique").on(t.invoiceId, t.lineNumber)],
 );

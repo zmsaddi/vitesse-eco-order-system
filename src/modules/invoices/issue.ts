@@ -188,6 +188,11 @@ export async function issueInvoiceInTx(
 
   const refCode = await generateInvoiceRefCode(tx);
 
+  // D-37 (Phase 4.1.2): canonical MUST cover every frozen column on the row.
+  // Previous subsets (paymentsCount + vendorSiret only) allowed a malicious
+  // UPDATE on shopIban or a payments_history entry to slip past the chain.
+  // Now the full vendor + payments arrays + line-level frozen fields are
+  // part of the input — any tampering post-issue fails verify.
   const canonical = canonicalJSON({
     avoirOfId: null,
     clientAddress: client.address ?? "",
@@ -198,17 +203,18 @@ export async function issueInvoiceInTx(
     deliveryDate: args.confirmDate,
     deliveryId: args.deliveryId,
     driverName,
-    lineCount: lineFrozen.length,
+    lines: lineFrozen, // full frozen fields per line, line_number order
     orderId: args.orderId,
     paymentMethod: order.paymentMethod,
-    paymentsCount: paymentsHistory.length,
+    paymentsHistory, // full array, insertion order
     refCode,
     sellerName,
+    status: "مؤكد",
     totalHt: totalHt.toFixed(2),
     totalTtc: totalTtc.toFixed(2),
     tvaAmount: totalVat.toFixed(2),
     vatRate: vatRate.toFixed(2),
-    vendorSiret: vendorSnapshot.shopSiret,
+    vendorSnapshot, // full 17-field VendorSnapshot
   });
   const { prevHash, rowHash } = await computeHashChainLink(
     tx,
@@ -245,9 +251,45 @@ export async function issueInvoiceInTx(
     .returning({ id: invoices.id, refCode: invoices.refCode });
   const invoiceId = inserted[0].id;
 
-  await tx
-    .insert(invoiceLines)
-    .values(lineFrozen.map((l) => ({ invoiceId, ...l })));
+  // D-37 per-line chain (Phase 4.1.2). Insert each line with its own chain
+  // link under HASH_CHAIN_KEYS.invoice_lines. Order within an invoice is
+  // line_number ASC (which is insertion order here); across invoices the
+  // advisory lock serializes concurrent issues.
+  for (const l of lineFrozen) {
+    const lineCanonical = canonicalJSON({
+      htAmountFrozen: l.htAmountFrozen,
+      invoiceId,
+      isGift: l.isGift,
+      lineNumber: l.lineNumber,
+      lineTotalTtcFrozen: l.lineTotalTtcFrozen,
+      productNameFrozen: l.productNameFrozen,
+      quantity: l.quantity,
+      unitPriceTtcFrozen: l.unitPriceTtcFrozen,
+      vatAmountFrozen: l.vatAmountFrozen,
+      vatRateFrozen: l.vatRateFrozen,
+      vinFrozen: l.vinFrozen,
+    });
+    const linkPair = await computeHashChainLink(
+      tx,
+      { chainLockKey: HASH_CHAIN_KEYS.invoice_lines, tableName: "invoice_lines" },
+      lineCanonical,
+    );
+    await tx.insert(invoiceLines).values({
+      invoiceId,
+      lineNumber: l.lineNumber,
+      productNameFrozen: l.productNameFrozen,
+      quantity: l.quantity,
+      unitPriceTtcFrozen: l.unitPriceTtcFrozen,
+      lineTotalTtcFrozen: l.lineTotalTtcFrozen,
+      vatRateFrozen: l.vatRateFrozen,
+      vatAmountFrozen: l.vatAmountFrozen,
+      htAmountFrozen: l.htAmountFrozen,
+      isGift: l.isGift,
+      vinFrozen: l.vinFrozen,
+      prevHash: linkPair.prevHash,
+      rowHash: linkPair.rowHash,
+    });
+  }
 
   return { id: invoiceId, refCode: inserted[0].refCode };
 }
