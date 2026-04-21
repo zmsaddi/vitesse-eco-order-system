@@ -43,3 +43,28 @@ export function assertCanHandover(claims: TreasuryClaims): void {
     );
   }
 }
+
+// Phase 4.3 — transfer is PM/GM only. No manager, no driver.
+export function assertCanTransfer(claims: TreasuryClaims): void {
+  if (claims.role !== "pm" && claims.role !== "gm") {
+    throw new PermissionError(
+      "تحويل الأموال بين الصناديق متاح لـ PM/GM فقط.",
+    );
+  }
+}
+
+// Phase 4.3 — reconcile role gate (coarse; fine-grained "manager owns the
+// target account" check lives in reconcile.ts because it needs the account
+// row). This gate rejects seller / driver / stock_keeper at the service
+// boundary as defense-in-depth against a route layer bypass.
+export function assertCanReconcile(claims: TreasuryClaims): void {
+  if (
+    claims.role !== "pm" &&
+    claims.role !== "gm" &&
+    claims.role !== "manager"
+  ) {
+    throw new PermissionError(
+      "تسوية الصندوق متاحة لـ PM/GM والمدير فقط.",
+    );
+  }
+}

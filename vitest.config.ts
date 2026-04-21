@@ -55,6 +55,8 @@ export default defineConfig({
         "src/modules/treasury/accounts.ts",       // Phase 4.2 — FOR UPDATE on treasury_accounts (integration)
         "src/modules/treasury/bridge.ts",         // Phase 4.2 — collection bridge + BR-55b cap (integration)
         "src/modules/treasury/handover.ts",       // Phase 4.2 — handover tx logic (integration)
+        "src/modules/treasury/transfer.ts",       // Phase 4.3 — transfer tx + FOR UPDATE canonical order (integration)
+        "src/modules/treasury/reconcile.ts",      // Phase 4.3 — reconcile tx + expected-from-movements SUM (integration)
         "src/modules/users/treasury-wiring.ts",   // Phase 4.2 — idempotent treasury-account provisioning (integration)
         "src/modules/**/mappers.ts", // Trivial projections — covered via integration
         "src/modules/**/service.ts", // Business logic — covered by integration tests (require DB)

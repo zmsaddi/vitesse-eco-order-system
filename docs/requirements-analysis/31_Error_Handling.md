@@ -154,6 +154,10 @@ export class CustodyCapExceededError extends BusinessRuleError {
 | `INVALID_MANAGER` | المستخدم المحدد ليس مديراً نشطاً | users service validateManagerLink: manager_id references user not (role='manager' AND active) | 400 |
 | `MANAGER_BOX_MISSING` | لا يوجد صندوق للمدير المقصود | Handover or driver-custody auto-wiring: manager_box for the target manager not found (defense-in-depth — bootstrap should always create it) | 409 |
 | `MAIN_CASH_MISSING` | الصندوق الرئيسي (main_cash) غير مُهيَّأ — شغِّل /api/init أولاً | Phase 4.2.1 `ensureManagerBox`: no row with `type='main_cash'` in treasury_accounts (defense-in-depth — should be unreachable after /api/init) | 500 |
+| `INVALID_TRANSFER_ROUTE` | المسار غير مسموح: {from.type} → {to.type} | Phase 4.3 `performTransfer`: (fromType, toType) pair outside the 4-route allowlist (funding / manager_settlement / bank_deposit / bank_withdrawal) — server-inferred category cannot be resolved | 409 |
+| `INSUFFICIENT_BALANCE` | الرصيد ({balance}€) أقل من مبلغ التحويل ({amount}€) | Phase 4.3 `performTransfer`: source account balance < amount under FOR UPDATE (0.005€ tolerance) | 409 |
+| `TREASURY_ACCOUNT_MISSING` | حساب الصندوق غير موجود | Phase 4.3 `performTransfer` / `performReconcile`: `fromAccountId` / `toAccountId` / `accountId` resolves to no row in treasury_accounts | 409 |
+| `TREASURY_EXPECTED_COMPUTATION_FAILED` | فشل حساب الرصيد المتوقع من حركات الصندوق | Phase 4.3 `computeExpectedBalance`: SUM over treasury_movements returns a non-finite value (defense-in-depth — should be unreachable unless amount column corrupted) | 500 |
 | `OVERLAPPING_PERIOD` | فترة التوزيع متداخلة مع فترة موجودة | profit_distribution_groups overlap detected | 409 |
 | `CRON_UNAUTHORIZED` | **(لا يُعرض — server-only)** | CRON_SECRET mismatch or missing | 401 |
 

@@ -128,4 +128,6 @@ export async function listTreasury(
 // Re-exports so route handlers + confirm.ts import a single module path.
 export { performHandover } from "./handover";
 export { bridgeCollection, type BridgeCollectionArgs } from "./bridge";
+export { performTransfer, type TransferResult } from "./transfer";
+export { performReconcile, type ReconcileResult } from "./reconcile";
 export type { TreasuryClaims } from "./permissions";

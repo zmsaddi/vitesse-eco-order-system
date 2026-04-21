@@ -53,6 +53,32 @@ export const HandoverInput = z.object({
 });
 export type HandoverInput = z.infer<typeof HandoverInput>;
 
+// Phase 4.3 — POST /api/v1/treasury/transfer. Category is server-inferred
+// from (from.type, to.type) against the 4-route allowlist in transfer.ts;
+// the caller does NOT specify it. `amount > 0` is guarded at the schema
+// layer + re-asserted at the service layer (defense-in-depth for any caller
+// that bypasses Zod).
+export const TransferInput = z.object({
+  fromAccountId: z.number().int().positive(),
+  toAccountId: z.number().int().positive(),
+  amount: z.number().positive().max(10_000_000),
+  notes: z.string().max(2048).default(""),
+});
+export type TransferInput = z.infer<typeof TransferInput>;
+
+// Phase 4.3 — POST /api/v1/treasury/reconcile. `actualBalance` is what the
+// operator counted physically (cash) or read from the bank statement; the
+// service compares it against the expected balance RECOMPUTED from
+// treasury_movements (source of truth per 12_Accounting_Rules §reconcile),
+// NOT against the cached treasury_accounts.balance. Zero is an allowed
+// physical count → schema permits `.min(0)`.
+export const ReconcileInput = z.object({
+  accountId: z.number().int().positive(),
+  actualBalance: z.number().min(0).max(100_000_000),
+  notes: z.string().max(2048).default(""),
+});
+export type ReconcileInput = z.infer<typeof ReconcileInput>;
+
 // GET /api/v1/treasury query — simple pagination for movements.
 export const ListTreasuryQuery = z.object({
   movementsLimit: z.coerce.number().int().min(1).max(500).default(100),
