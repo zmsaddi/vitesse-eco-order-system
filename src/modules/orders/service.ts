@@ -314,12 +314,17 @@ export async function cancelOrder(
 
   // BR-18: apply bonus actions to any already-materialised bonus rows. For
   // pre-confirmed cancellations this is a no-op; for confirmed cancellations
-  // it retains, cancels-unpaid, or refuses cancel_as_debt until settlements.
+  // it retains, cancels-unpaid, or (Phase 4.4) converts settled bonuses to
+  // debt rows consumed by the next settlement payout.
   const bonusOutcome = await applyBonusActionsOnCancel(tx, {
     orderId: id,
     fromStatus: current.status,
     sellerAction: input.sellerBonusAction,
     driverAction: input.driverBonusAction,
+    claims: {
+      userId: claims.userId,
+      username: claims.username,
+    },
   });
 
   await logActivity(tx, {
@@ -338,6 +343,10 @@ export async function cancelOrder(
       sellerRowsCancelled: bonusOutcome.sellerRowsCancelled,
       driverRowsRetained: bonusOutcome.driverRowsRetained,
       driverRowsCancelled: bonusOutcome.driverRowsCancelled,
+      sellerDebtSettlementId: bonusOutcome.sellerDebtSettlementId,
+      sellerDebtAmount: bonusOutcome.sellerDebtAmount,
+      driverDebtSettlementId: bonusOutcome.driverDebtSettlementId,
+      driverDebtAmount: bonusOutcome.driverDebtAmount,
     },
   });
 

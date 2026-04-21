@@ -531,7 +531,12 @@ describe.skipIf(!HAS_DB)("Phase 4.0.1 corrective fixes (requires TEST_DATABASE_U
     for (const r of allRows) expect(r.deletedAt).not.toBeNull();
   });
 
-  it("BR-18 cancel_as_debt: confirmed order → 412 SETTLEMENT_FLOW_NOT_SHIPPED", async () => {
+  it("BR-18 cancel_as_debt on unpaid bonuses: confirmed order → 409 BONUS_NOT_SETTLED_FOR_DEBT", async () => {
+    // Phase 4.4: cancel_as_debt now ships, but only operates on bonuses that
+    // are already status='settled'. An unpaid bonus cannot retroactively be
+    // converted to a debt — the earlier settlement never paid it out, so
+    // there's no "clawback" to book. The refusal is now 409 with a domain
+    // code (was 412 SETTLEMENT_FLOW_NOT_SHIPPED pre-4.4).
     const { orderId } = await confirmedOrder("br18-dbt");
     const res = await cancelOrder(
       orderId,
@@ -544,9 +549,9 @@ describe.skipIf(!HAS_DB)("Phase 4.0.1 corrective fixes (requires TEST_DATABASE_U
       },
       "br18-dbt",
     );
-    expect(res.status).toBe(412);
+    expect(res.status).toBe(409);
     const body = (await res.json()) as { code: string };
-    expect(body.code).toBe("SETTLEMENT_FLOW_NOT_SHIPPED");
+    expect(body.code).toBe("BONUS_NOT_SETTLED_FOR_DEBT");
 
     // Transaction must roll back — bonuses stay intact, order stays مؤكد.
     const { withRead } = await import("@/db/client");

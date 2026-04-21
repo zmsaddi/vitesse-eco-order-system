@@ -82,7 +82,7 @@ export class CustodyCapExceededError extends BusinessRuleError {
 | 403 | ممنوع | الدور لا يملك صلاحية |
 | 404 | غير موجود | كيان غير موجود |
 | 409 | تعارض | oversell، دفع زائد، إلغاء مكرَّر |
-| 412 | شرط مسبق مفقود | ميزة مطلوبة لم تُشحن بعد (مثلاً: `SETTLEMENT_FLOW_NOT_SHIPPED`) |
+| 412 | شرط مسبق مفقود | ميزة مطلوبة لم تُشحن بعد (مثلاً: `D35_READINESS_INCOMPLETE`) |
 | 413 | حجم كبير | audio > 10 MB، image > 5 MB |
 | 428 | شرط مسبق مطلوب | cancel بلا bonusActions + bonuses exist |
 | 429 | تجاوز الحد | voice rate limit |
@@ -129,7 +129,10 @@ export class CustodyCapExceededError extends BusinessRuleError {
 | `BONUS_CHOICE_REQUIRED` | يجب اختيار مصير عمولة البائع والسائق قبل الإلغاء | Cancel dialog C1 incomplete: missing bonusActions | 428 |
 | `SETTLED_BONUS_SELLER` | لا يمكن إلغاء علاوة البائع لأنها بحالة "{status}" | BR-18 cancel_unpaid refused: bonus row for seller already 'settled' | 409 |
 | `SETTLED_BONUS_DRIVER` | لا يمكن إلغاء علاوة السائق لأنها بحالة "{status}" | BR-18 cancel_unpaid refused: bonus row for driver already 'settled' | 409 |
-| `SETTLEMENT_FLOW_NOT_SHIPPED` | لم يُشحن بعد مسار التسويات (Phase 6) — لا يمكن تحويل علاوة إلى دَين حالياً | BR-18 cancel_as_debt deferred until settlements module ships | 412 |
+| `BONUS_NOT_SETTLED_FOR_DEBT` | لا يمكن تحويل علاوة {البائع\|السائق} إلى دَين قبل تسويتها — الحالة الحالية "{status}" | Phase 4.4 `applyBonusActionsOnCancel`: `cancel_as_debt` invoked on a role where ≥1 bonus row has `status !== 'settled'`. Zero side effects. | 409 |
+| `DEBT_EXCEEDS_PAYOUT` | الديون المتراكمة تتجاوز مجموع العلاوات — لا يمكن الصرف | Phase 4.4 `performSettlementPayout`: `grossBonus + debtTotal < 0`. All-or-nothing consumption across every unapplied `type='debt'` row for the (userId, role). Zero side effects. | 409 |
+| `INVALID_SETTLEMENT_BONUS_SET` | قائمة العلاوات غير صحيحة — الحالة/المالك/الدور غير متجانس (أو معرف غير موجود) | Phase 4.4 `performSettlementPayout`: `bonusIds` includes ids that are missing, cross-user, cross-role, already-settled, retained, or soft-deleted. Also fires when a concurrent settlement already linked the bonus rows. | 400 |
+| `SETTLEMENT_SOURCE_ACCOUNT_INVALID` | حساب المصدر غير مسموح للدفع — يُسمح فقط بـ main_cash أو main_bank. أو: طريقة الدفع لا تطابق حساب المصدر | Phase 4.4 `performSettlementPayout` / `performRewardPayout`: `fromAccount.type ∉ {main_cash, main_bank}` OR paymentMethod invariant violated (main_cash ↔ كاش, main_bank ↔ بنك). One umbrella code for both invariants. | 409 |
 | `D35_READINESS_INCOMPLETE` | لا يمكن إصدار فاتورة: مذكرات D-35 الإلزامية ناقصة ({keys}). راجع الإعدادات | confirm-delivery pre-check: one or more of D35_REQUIRED_SETTINGS is missing/empty/placeholder | 412 |
 | `INVOICE_NO_ITEMS` | لا يمكن إصدار فاتورة لطلب بلا أصناف | issueInvoiceInTx: order_items empty (should be unreachable — defense-in-depth) | 409 |
 | `INVOICE_TOTAL_MISMATCH` | اختلال مجاميع الفاتورة | issueInvoiceInTx: sum(line.line_total) ≠ orders.total_amount (defense-in-depth) | 500 |

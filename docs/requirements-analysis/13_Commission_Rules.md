@@ -114,27 +114,36 @@ driverBonus = round2(driverFixed)
 
 ## سير عمل العمولة
 
+Phase 4.4 — التسميات الكنسية للحالات هي `unpaid | settled | retained` (وليس `unsettled` كما ظهر في نسخ أقدم من الوثائق).
+
 ```
 طلب يُنشأ ──→ لا عمولة (محجوز)
      │
 تسليم يُؤكد ──→ عمولة تُحسب لكل صنف (seller) + عمولة واحدة (driver)
      │
-     └──→ settled = false (غير مصروفة)
+     └──→ status='unpaid'  (مُستحقَّة وغير مدفوعة بعد)
                │
-     تسوية ──→ settled = true + settlement_id
+     POST /api/v1/settlements (kind=settlement)
+     ──→ status='settled' + settlement_id = <new>
+               │
+     cancel_as_debt (Phase 4.4)
+     ──→ INSERT settlements(type='debt', amount=-SUM, applied=false)
+         الصفوف تبقى status='settled' تاريخياً؛ الدَّين يُستهلك في التسوية القادمة
 ```
 
 ---
 
-## الإلغاء والعمولات (شاشة C1 — D-18 محدَّث)
+## الإلغاء والعمولات (شاشة C1 — D-18 محدَّث + Phase 4.4)
 
 عند إلغاء طلب، لكل من البائع والسائق 3 خيارات مخزَّنة في `cancellations.seller_bonus_action` / `driver_bonus_action`:
 
-| الـ action | حالة العمولة | النتيجة |
-|------------|:------------:|---------|
-| `keep` | أي حالة | `bonuses.status = 'retained'` — موجودة لكن مستبعدة من التسويات |
-| `cancel_unpaid` | غير مصروفة (status='unsettled') | `bonuses.deleted_at = NOW()` — soft-delete |
-| `cancel_as_debt` | مصروفة (status='settled') | INSERT settlement صف سالب (`amount = -total_bonus`) لاستهلاك من الدفعة التالية |
+| الـ action | حالة العمولة المطلوبة | النتيجة |
+|------------|:---------------------:|---------|
+| `keep` | أي حالة | `bonuses.status = 'retained'` — موجودة لكن مستبعدة من التسويات المستقبلية |
+| `cancel_unpaid` | غير مدفوعة (status='unpaid' فقط) | `bonuses.deleted_at = NOW()` — soft-delete. إذا وُجد صف status ≠ 'unpaid' → 409 `SETTLED_BONUS_{ROLE}` |
+| `cancel_as_debt` | مدفوعة (status='settled' لكل الصفوف فقط) | INSERT واحد في `settlements` بـ `type='debt', amount=-SUM(total_bonus), applied=false, payment_method='N/A'`. **لا تُكتب treasury_movement** (لا تدفُّق نقدي وقت الإلغاء). الدَّين يُخصم تلقائياً من التسوية التالية لنفس المستخدم/الدور. إذا وُجد صف status ≠ 'settled' → 409 `BONUS_NOT_SETTLED_FOR_DEBT` بلا أثر |
+
+**ملاحظة حاسمة (Phase 4.4)**: كل صف `settlements.type='debt'` يحمل `payment_method='N/A'` بشكل ثابت — لا تُعرض خيار "كاش/بنك/آجل" للمستخدم على مسار `cancel_as_debt` لأن الصف لا يمثل دفعاً حقيقياً. الـ payout النقدي يحدث لاحقاً عند استهلاك الدَّين داخل `type='settlement'` row.
 
 **الافتراضي (D-18)**:
 - إذا لا توجد صفوف bonus للطلب: القيمة `cancel_unpaid` افتراضياً (UI يعرضها معطَّلة مع ملاحظة "لا عمولة").

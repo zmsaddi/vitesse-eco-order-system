@@ -58,6 +58,11 @@ export default defineConfig({
         "src/modules/treasury/transfer.ts",       // Phase 4.3 — transfer tx + FOR UPDATE canonical order (integration)
         "src/modules/treasury/reconcile.ts",      // Phase 4.3 — reconcile tx + expected-from-movements SUM (integration)
         "src/modules/users/treasury-wiring.ts",   // Phase 4.2 — idempotent treasury-account provisioning (integration)
+        "src/modules/settlements/payout.ts",      // Phase 4.4 — settlement tx + FOR UPDATE on bonuses+debts+source (integration)
+        "src/modules/settlements/reward.ts",      // Phase 4.4 — reward tx (integration)
+        "src/modules/settlements/list.ts",        // Phase 4.4 — list + summary aggregates (DB-heavy, integration)
+        "src/modules/settlements/credit.ts",      // Phase 4.4 — unapplied-debt lock + sum helpers (integration)
+        "src/modules/settlements/source-account.ts", // Phase 4.4 — source-type + paymentMethod invariants (integration-exercised via payout/reward)
         "src/modules/**/mappers.ts", // Trivial projections — covered via integration
         "src/modules/**/service.ts", // Business logic — covered by integration tests (require DB)
         "src/modules/users/nav.ts",  // Trivial re-export — covered via integration

@@ -206,21 +206,26 @@ distributableProfit = round2(netProfit - totalDistributed)
 
 ## 11. الرصيد المتاح للتسوية (Available Credit for Settlement)
 
-```
-unsettledBonuses = SUM(bonuses.total_bonus)
-                   WHERE user_id = :user
-                   AND status = 'unsettled'
-                   AND deleted_at IS NULL
+Phase 4.4 — نطاق تسمية موحَّد: `unpaid` هو الحالة الكنسية للـ bonus قبل دفعه (كان في الوثائق القديمة `unsettled`، والكود لم يستخدم هذا التوكن قط). الديون غير المستهلكة تُخصم تلقائياً من أي تسوية قادمة لنفس `(user_id, role)` عبر `applied_in_settlement_id`.
 
-recoveryDebt     = SUM(settlements.amount)
-                   WHERE user_id = :user
-                   AND amount < 0
-                   AND applied = false   // لم تُستهلك بعد
-                   AND deleted_at IS NULL
-
-availableCredit = round2(unsettledBonuses + recoveryDebt)
-// recoveryDebt سالب → يُنقِص المتاح
 ```
+unpaidBonuses = SUM(bonuses.total_bonus)
+                 WHERE user_id = :user
+                 AND status = 'unpaid'
+                 AND deleted_at IS NULL
+
+unappliedDebt = SUM(settlements.amount)
+                 WHERE user_id = :user
+                 AND type = 'debt'
+                 AND applied = false
+                 AND deleted_at IS NULL
+// amount سالب دائماً على type='debt' → unappliedDebt <= 0
+
+availableCredit = round2(unpaidBonuses + unappliedDebt)
+// الديون غير المستهلكة تُقلِّص الرصيد المتاح قبل أن يُصرَف
+```
+
+**مسار الاستهلاك (consumption)**: `POST /api/v1/settlements { kind: "settlement" }` يقفل كل صفوف `type='debt', applied=false` للمستخدم+الدور، ويجمعها في `debtTotal`، ويحسب `netPayout = grossBonus + debtTotal`. إذا `netPayout < 0` → 409 `DEBT_EXCEEDS_PAYOUT` بلا أثر. وإلّا تُدفع الـ `netPayout` وتُعلَّم كل الديون المقفولة `applied=true`.
 
 ---
 

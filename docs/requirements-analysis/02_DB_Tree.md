@@ -555,13 +555,13 @@ CHECK (key IN (
 | fixed_bonus | NUMERIC(19,2) | DEFAULT 0 |
 | extra_bonus | NUMERIC(19,2) | DEFAULT 0 |
 | total_bonus | NUMERIC(19,2) | DEFAULT 0 |
-| status | TEXT | DEFAULT 'unsettled' |
+| status | TEXT | DEFAULT 'unpaid' (Phase 4.4 canonical vocabulary) |
 | settlement_id | INTEGER | NULL → FK settlements.id |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() |
 | deleted_at | TIMESTAMPTZ | NULL |
 
 **CHECK**: `role IN ('seller','driver')`
-**CHECK**: `status IN ('unsettled','settled','retained')`
+**CHECK**: `status IN ('unpaid','settled','retained')`
 **UNIQUE (D-29)**:
 - `(delivery_id, order_item_id, role) WHERE role='seller' AND deleted_at IS NULL` — seller bonus per item
 - `(delivery_id, role) WHERE role='driver' AND deleted_at IS NULL` — عمولة واحدة فقط للسائق لكل توصيل، order_item_id=NULL
@@ -588,22 +588,33 @@ CHECK (key IN (
 
 ---
 
-## 22. `settlements` — التسويات والمكافآت
+## 22. `settlements` — التسويات والمكافآت والدَّيون
 
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
 | date | DATE | NOT NULL |
-| type | TEXT | NOT NULL |
-| username | TEXT | NULL |
-| description | TEXT | NOT NULL |
-| amount | NUMERIC(19,2) | NOT NULL |
-| settled_by | TEXT | NOT NULL |
+| user_id | INTEGER | NOT NULL → FK users.id ON DELETE RESTRICT |
+| username | TEXT | NOT NULL |
+| role | TEXT | NOT NULL (seller\|driver\|manager\|…) |
+| type | TEXT | NOT NULL CHECK IN ('settlement','reward','debt') |
+| amount | NUMERIC(19,2) | NOT NULL (سالب عندما type='debt') |
+| payment_method | TEXT | NOT NULL DEFAULT 'كاش' (constraint: debt → 'N/A'؛ settlement/reward → 'كاش' أو 'بنك' فقط — service-layer invariant) |
 | notes | TEXT | DEFAULT '' |
-| updated_by | TEXT | NULL |
-| updated_at | TIMESTAMPTZ | NULL |
+| created_by | TEXT | NOT NULL |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() |
+| deleted_at | TIMESTAMPTZ | NULL |
+| applied | BOOLEAN | NOT NULL DEFAULT false (Phase 4.4) |
+| applied_in_settlement_id | INTEGER | NULL → FK settlements.id ON DELETE RESTRICT (Phase 4.4) |
 
-**ملاحظة**: المبلغ السالب = دين استرداد (عمولة مصروفة أُلغيت). قرار C2.
+**CHECK (Phase 4.4)**: `NOT applied OR type = 'debt'` — فقط صفوف الدَّين قابلة لاستهلاكها.
+**CHECK (Phase 4.4)**: `(applied=false AND applied_in_settlement_id IS NULL) OR (applied=true AND applied_in_settlement_id IS NOT NULL)` — الاستهلاك يعني ارتباط صريح بتسوية تالية.
+**INDEX (Phase 4.4 partial)**: `idx_settlements_unapplied_debt ON (user_id, role) WHERE type='debt' AND applied=false AND deleted_at IS NULL` — مسار hot path لـ lock debts أثناء `performSettlementPayout`.
+
+**ملاحظة (BR-54 + Phase 4.4)**:
+- `type='settlement'` — دفع علاوات mapped إلى `bonuses.settlement_id`. paymentMethod ∈ {كاش,بنك} فقط، ويجب أن يطابق نوع حساب المصدر (main_cash↔كاش، main_bank↔بنك).
+- `type='reward'` — مكافأة تقديرية. نفس قيود paymentMethod كـ settlement.
+- `type='debt'` — نتيجة `cancel_as_debt`. amount سالب. paymentMethod ثابت `'N/A'` (لا حركة نقد وقت الإلغاء — الدَّين يُستهلك في التسوية التالية تلقائياً).
 
 ---
 

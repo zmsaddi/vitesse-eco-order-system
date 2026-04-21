@@ -3,6 +3,7 @@
 > **Template**: D-78 §5 (13-section).
 > **Type**: Required corrective tranche for Phase 4.0 — closes the 4 gaps flagged by external review. Does NOT authorize a full pilot (no invoice PDF / treasury / settlements yet).
 > **Status**: Superseded by **Phase 4.0.2** (accounting-date correction). See [`phase-4.0.2-delivery-report.md`](./phase-4.0.2-delivery-report.md).
+> **§0 Errata (Phase 4.4 — 2026-04-21)**: This report documents the deferred state of `cancel_as_debt` (error code `SETTLEMENT_FLOW_NOT_SHIPPED`, HTTP 412). Phase 4.4 ships the full settlements flow and replaces that error with the real `cancel_as_debt` implementation plus `BONUS_NOT_SETTLED_FOR_DEBT` (409) for the non-settled case. The existing integration test was updated in the same tranche. See [`phase-4.4-delivery-report.md`](./phase-4.4-delivery-report.md).
 
 ---
 

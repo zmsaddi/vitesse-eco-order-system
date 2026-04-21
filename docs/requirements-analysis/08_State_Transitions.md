@@ -99,18 +99,20 @@ pending ──→ in_progress ──→ completed
 
 ## 6. حالات العمولة (Bonus Status)
 
+Phase 4.4 — القيم الكنسية للحالات هي `unpaid | settled | retained` (كانت `unsettled` في نسخ قديمة من الوثيقة — الكود لم يستعمل هذا التوكن).
+
 ```
-           ┌──→ retained (keep)
-unsettled ─┼──→ deleted (cancel_unpaid)
-           └──→ settled ──→ negative_settlement_debt (cancel_as_debt)
+        ┌──→ retained (keep)
+unpaid ─┼──→ deleted (cancel_unpaid)
+        └──→ settled ──→ settlements(type='debt', applied=false) (cancel_as_debt)
 ```
 
 | من | إلى | الـ action | الشرط |
 |----|-----|-----------|-------|
-| unsettled | retained | `keep` | `cancellations.seller_bonus_action='keep'` — يُعلَم بـ status='retained'، يُستبعد من التسويات |
-| unsettled | deleted | `cancel_unpaid` | `cancellations.seller_bonus_action='cancel_unpaid'` — DELETE مباشر |
-| unsettled | settled | — | عبر تسوية ناجحة |
-| settled | negative_debt | `cancel_as_debt` | `cancellations.seller_bonus_action='cancel_as_debt'` — INSERT صف settlement سالب |
+| unpaid | retained | `keep` | `cancellations.seller_bonus_action='keep'` — يُعلَم بـ status='retained'، يُستبعد من التسويات |
+| unpaid | deleted | `cancel_unpaid` | `cancellations.seller_bonus_action='cancel_unpaid'` — soft-delete (deleted_at=NOW) |
+| unpaid | settled | — | عبر `POST /api/v1/settlements { kind:'settlement' }` ناجح |
+| settled | — (bonus stays settled) | `cancel_as_debt` | Phase 4.4: INSERT `settlements(type='debt', amount=-SUM(total_bonus), applied=false, payment_method='N/A')`. البونص نفسه يبقى settled تاريخياً — الدَّين يُستهلك من التسوية التالية لنفس المستخدم/الدور تلقائياً |
 
 ### الـ 7 invariants الحاكمة للإلغاء
 

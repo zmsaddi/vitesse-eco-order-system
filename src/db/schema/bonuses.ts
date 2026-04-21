@@ -1,4 +1,4 @@
-import { integer, numeric, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, integer, numeric, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { deliveries } from "./delivery";
 import { orders, orderItems } from "./orders";
@@ -45,7 +45,13 @@ export const bonuses = pgTable(
   ],
 );
 
-// Table 22: settlements (bonus payouts + rewards)
+// Table 22: settlements (bonus payouts + rewards + debts).
+// Phase 4.4 added `applied` + `applied_in_settlement_id` to track consumption
+// of type='debt' rows by a later type='settlement' payout (BR-55 debt consumption).
+// CHECK constraints at the DB layer:
+//   - applied=true implies type='debt'
+//   - applied_in_settlement_id IS NOT NULL iff applied=true
+// debt rows hardcode paymentMethod='N/A' (no cash moves at cancel-time).
 export const settlements = pgTable("settlements", {
   id: serial("id").primaryKey(),
   date: text("date").notNull(),
@@ -61,6 +67,8 @@ export const settlements = pgTable("settlements", {
   createdBy: text("created_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  applied: boolean("applied").notNull().default(false),
+  appliedInSettlementId: integer("applied_in_settlement_id"),
 });
 
 // Table 23: profit_distribution_groups (D-54 non-overlapping periods enforced in service)
