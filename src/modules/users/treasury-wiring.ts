@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import type { DbTx } from "@/db/client";
 import { treasuryAccounts, users } from "@/db/schema";
 import { BusinessRuleError } from "@/lib/api-errors";
@@ -45,9 +45,12 @@ export async function validateManagerLink(
 export async function findManagerBox(
   tx: DbTx,
   managerUserId: number,
-): Promise<{ id: number } | null> {
+): Promise<{ id: number; parentAccountId: number | null } | null> {
   const rows = await tx
-    .select({ id: treasuryAccounts.id })
+    .select({
+      id: treasuryAccounts.id,
+      parentAccountId: treasuryAccounts.parentAccountId,
+    })
     .from(treasuryAccounts)
     .where(
       and(
@@ -59,20 +62,68 @@ export async function findManagerBox(
   return rows[0] ?? null;
 }
 
+/**
+ * Phase 4.2.1 — find the canonical main_cash account. manager_box parents
+ * here (BR-52). `/api/init` seeds exactly one row with type='main_cash';
+ * ORDER BY id ASC LIMIT 1 is deterministic if duplicates ever appear.
+ * Returns null only if the system hasn't been initialised — callers that
+ * need a main_cash should escalate to MAIN_CASH_MISSING.
+ */
+async function findMainCashId(tx: DbTx): Promise<number | null> {
+  const rows = await tx
+    .select({ id: treasuryAccounts.id })
+    .from(treasuryAccounts)
+    .where(eq(treasuryAccounts.type, "main_cash"))
+    .orderBy(asc(treasuryAccounts.id))
+    .limit(1);
+  return rows[0]?.id ?? null;
+}
+
+/**
+ * Ensure a manager_box exists for this user AND that its parent_account_id
+ * is pinned to main_cash.id (BR-52 canonical hierarchy).
+ *
+ * Phase 4.2.1 change: this helper no longer blindly returns an existing
+ * row's id — it also checks the parent pointer. A stale / NULL / wrong
+ * parent is rebound to the canonical main_cash.id every time the helper
+ * runs. Treat it as an idempotent invariant-enforcer, not merely a lazy
+ * creator.
+ */
 export async function ensureManagerBox(
   tx: DbTx,
   managerUserId: number,
   managerName: string,
 ): Promise<number> {
+  const mainCashId = await findMainCashId(tx);
+  if (mainCashId == null) {
+    throw new BusinessRuleError(
+      "الصندوق الرئيسي (main_cash) غير مُهيَّأ — شغِّل /api/init أولاً.",
+      "MAIN_CASH_MISSING",
+      500,
+      "ensureManagerBox: no main_cash row present in treasury_accounts",
+      { managerUserId },
+    );
+  }
+
   const existing = await findManagerBox(tx, managerUserId);
-  if (existing) return existing.id;
+  if (existing) {
+    // Phase 4.2.1 invariant enforcement: always rebind if parent drifts
+    // (NULL, main_bank, orphan id). Idempotent when already correct.
+    if (existing.parentAccountId !== mainCashId) {
+      await tx
+        .update(treasuryAccounts)
+        .set({ parentAccountId: mainCashId })
+        .where(eq(treasuryAccounts.id, existing.id));
+    }
+    return existing.id;
+  }
   const inserted = await tx
     .insert(treasuryAccounts)
     .values({
       type: "manager_box",
       name: `صندوق ${managerName}`,
       ownerUserId: managerUserId,
-      parentAccountId: null,
+      parentAccountId: mainCashId,
       balance: "0",
       active: 1,
     })

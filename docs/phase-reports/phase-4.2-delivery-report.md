@@ -2,6 +2,19 @@
 
 > **Template**: D-78 §5 (13-section) + Implementation Contract + Self-Review Findings.
 > **Type**: First functional treasury tranche inside Phase 4. Strictly scoped — transfer/reconcile/settlements/distributions all remain out.
+> **Status**: Superseded by **Phase 4.2.1** (BR-52 hierarchy fix). See [`phase-4.2.1-delivery-report.md`](./phase-4.2.1-delivery-report.md).
+
+---
+
+## 0. Errata (added 2026-04-21 after external review)
+
+One structural defect surfaced after `c214453` committed: every `manager_box` created by Phase 4.2 — both via `ensureManagerBox` in the users service and via migration 0009's backfill — was inserted with `parent_account_id = NULL`. That detaches manager boxes from the canonical `main_cash → manager_box → driver_custody` chain required by BR-52 ([09_Business_Rules.md](../requirements-analysis/09_Business_Rules.md#L129)) and [12_Accounting_Rules.md §hierarchy](../requirements-analysis/12_Accounting_Rules.md#L59-L83).
+
+Resolved in **Phase 4.2.1**:
+- Migration 0010 rebinds every `manager_box` whose `parent_account_id IS DISTINCT FROM main_cash.id` — covering the NULL case AND any non-canonical parent (e.g. `main_bank.id`).
+- `ensureManagerBox` (users service) now looks up `main_cash`, pins new rows to it, AND rebinds existing rows whose parent drifted. Treated as an idempotent invariant-enforcer, not a lazy creator.
+
+Read this report together with the 4.2.1 report.
 
 ---
 

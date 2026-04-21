@@ -655,13 +655,14 @@ CHECK (key IN (
 
 **CHECK**: schema enforces `type` via application code (no DB-level CHECK on `type` today; see schema [src/db/schema/treasury.ts](../../src/db/schema/treasury.ts)).
 
-**Bootstrap (Phase 4.2)**:
-- `/api/init` creates `main_cash` + `main_bank` rows (owner = admin / pm).
-- Creating a user with `role='manager'` ⇒ users service idempotently creates the corresponding `manager_box`.
-- Creating a user with `role='driver'` and `manager_id` set ⇒ users service idempotently creates the corresponding `driver_custody` parented to the manager's `manager_box`.
+**Bootstrap (Phase 4.2 + 4.2.1)**:
+- `/api/init` creates `main_cash` + `main_bank` rows (owner = admin / pm). Both are roots — `parent_account_id IS NULL`.
+- Creating a user with `role='manager'` ⇒ users service idempotently creates the corresponding `manager_box`. **Phase 4.2.1**: `manager_box.parent_account_id` is pinned to `main_cash.id` (BR-52 canonical chain). `ensureManagerBox` also rebinds an existing manager_box if its parent has drifted away from `main_cash.id`.
+- Creating a user with `role='driver'` and `manager_id` set ⇒ users service idempotently creates the corresponding `driver_custody` parented to the manager's `manager_box.id`.
 - Updating a driver's `manager_id` ⇒ rebinds `driver_custody.parent_account_id`; never creates a duplicate.
 - Disabling a user or changing role ⇒ accounts are NOT deleted; treasury operations on them are gated at the service layer.
 - Migration `0009_users_manager_id.sql` backfills `manager_box` for every existing `role='manager'` AND `active=true` user that lacks one.
+- Migration `0010_manager_box_under_main_cash.sql` (Phase 4.2.1) rebinds every `manager_box` whose `parent_account_id IS DISTINCT FROM` the canonical `main_cash.id` (covers both the `NULL` case left by 0009 AND any non-`main_cash` parent). Idempotent: zero-op once every `manager_box` is canonical.
 
 ---
 

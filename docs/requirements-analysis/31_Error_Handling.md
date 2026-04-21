@@ -153,6 +153,7 @@ export class CustodyCapExceededError extends BusinessRuleError {
 | `DRIVER_MANAGER_REQUIRED` | السائقون النشطون يجب أن يكونوا مرتبطين بمدير | users createUser/updateUser: role='driver' AND active=true AND manager_id IS NULL | 400 |
 | `INVALID_MANAGER` | المستخدم المحدد ليس مديراً نشطاً | users service validateManagerLink: manager_id references user not (role='manager' AND active) | 400 |
 | `MANAGER_BOX_MISSING` | لا يوجد صندوق للمدير المقصود | Handover or driver-custody auto-wiring: manager_box for the target manager not found (defense-in-depth — bootstrap should always create it) | 409 |
+| `MAIN_CASH_MISSING` | الصندوق الرئيسي (main_cash) غير مُهيَّأ — شغِّل /api/init أولاً | Phase 4.2.1 `ensureManagerBox`: no row with `type='main_cash'` in treasury_accounts (defense-in-depth — should be unreachable after /api/init) | 500 |
 | `OVERLAPPING_PERIOD` | فترة التوزيع متداخلة مع فترة موجودة | profit_distribution_groups overlap detected | 409 |
 | `CRON_UNAUTHORIZED` | **(لا يُعرض — server-only)** | CRON_SECRET mismatch or missing | 401 |
 

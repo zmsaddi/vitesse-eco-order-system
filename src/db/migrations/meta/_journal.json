@@ -71,6 +71,13 @@
       "when": 1776753237690,
       "tag": "0009_users_manager_id",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1776800000000,
+      "tag": "0010_manager_box_under_main_cash",
+      "breakpoints": true
     }
   ]
 }
