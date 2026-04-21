@@ -66,7 +66,9 @@ v2 هو نظام إدارة عمليات كامل لشركة **Vitesse Eco SAS**
 
 ## نطاق MVP (D-71 — Post-Round-7)
 
-**MVP v1 (Phases 0..3) = Order-to-Cash فقط**:
+**MVP v1 / أول Production Deploy (Phases 0..4) = Order-to-Cash → Treasury handover**:
+
+> **ملاحظة توافق (Step 0.1 hotfix — 2026-04-21)**: كان هذا السطر يقرأ سابقاً "Phases 0..3 = Order-to-Cash فقط"، بينما قائمة البنود تضم صراحةً عناصر من Phase 4 (delivery + invoice + treasury handover). الصياغة الجديدة تتَّسق مع [Phase 4 Closure Criteria](#phase-4---التوصيل--الصناديق--الفواتير--العمولات--التسويات--xxl-12-16-يوم) ومع L16 "Production launch بعد Phase 4".
 
 **مُدرج في MVP** (هدف أول production deploy):
 1. Auth + 6 roles + DB-driven permissions (Phase 1).
