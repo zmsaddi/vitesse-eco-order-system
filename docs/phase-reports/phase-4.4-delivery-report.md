@@ -2,6 +2,7 @@
 
 > **Template**: D-78 §5 (13-section) + Implementation Contract + Self-Review Findings.
 > **Type**: Scope-bounded feature tranche (Step 2 of the Phase 4 closure plan). Ships the settlements engine, `cancel_as_debt` closure, and the minimal `/my-bonus` page. No avoir, no /distributions, no Phase 5 work.
+> **§0 Errata (Phase 4.4.1 — 2026-04-21)**: The Phase 4.4 UI surface shipped incomplete on three points flagged by user review: (1) `/settlements` page was a documentation shell with neither list nor forms, (2) `/my-bonus` bypassed the canonical API by importing `listBonuses` + calling `withRead` directly from the page, (3) `nav-items.ts` drifted from the Phase 4.4 permission contract (manager still had `/settlements`; seller/driver missing `/my-bonus`). Closed in [`phase-4.4.1-delivery-report.md`](./phase-4.4.1-delivery-report.md) with runtime smoke evidence.
 
 ---
 

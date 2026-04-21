@@ -42,16 +42,19 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { href: "/products", labelAr: "المنتجات" },
     { href: "/deliveries", labelAr: "التوصيلات" },
     { href: "/treasury", labelAr: "صندوقي" },
-    { href: "/settlements", labelAr: "التسويات" },
+    // Phase 4.4 contract (2026-04-21): /settlements is pm/gm only. Manager
+    // has no settlement-creation rights; link removed to match the API gate.
   ],
   seller: [
     { href: "/orders", labelAr: "طلباتي" },
     { href: "/clients", labelAr: "العملاء" },
     { href: "/products", labelAr: "الكتالوج" },
+    { href: "/my-bonus", labelAr: "عمولتي" },
   ],
   driver: [
     { href: "/driver-tasks", labelAr: "مهامي" },
     { href: "/deliveries", labelAr: "توصيلاتي" },
+    { href: "/my-bonus", labelAr: "عمولتي" },
   ],
   stock_keeper: [
     { href: "/preparation", labelAr: "التحضير" },

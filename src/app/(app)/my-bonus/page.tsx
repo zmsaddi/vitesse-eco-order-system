@@ -1,28 +1,50 @@
+import { cookies, headers } from "next/headers";
 import { enforcePageRole } from "@/lib/session-claims";
-import { withRead } from "@/db/client";
-import { listBonuses } from "@/modules/settlements/service";
+import type { BonusDto, BonusesSummaryDto } from "@/modules/settlements/dto";
 
-// Phase 4.4 — /my-bonus (seller/driver own-only view).
+// Phase 4.4.1 — /my-bonus (seller/driver own-only view).
+//
+// Canonical API usage: the page goes through the HTTP route handler
+// (/api/v1/bonuses) rather than importing `listBonuses` directly. This keeps
+// the page thin, guarantees it sees the exact same shape an external client
+// would see, and closes the drift risk a direct service-level import
+// would open on the next edit (middleware, rate-limits, observability all
+// attach to the route layer).
 //
 // Leakage prevention:
-//   - enforcePageRole is the first thing the page does — manager, pm, gm,
-//     stock_keeper are redirected to their role-home before any data fetch.
-//   - We call `listBonuses` through the claims-aware service, which forces
-//     `userId=claims.userId` for seller/driver regardless of what any query
-//     param would say. Even though this is a server component (no URL params
-//     surface from the browser), the guard is belt-and-suspenders.
-//   - No inline aggregation / computation — all numbers come pre-summed from
-//     the service's `computeBonusesSummary`.
+//   - enforcePageRole redirects manager / pm / gm / stock_keeper to their
+//     role-home BEFORE any data fetch.
+//   - The route handler itself forces userId=claims.userId for seller/driver
+//     regardless of query params — no override is possible from here.
+//   - This page passes NO query params at all; the route applies the
+//     own-only filter server-side.
+
+type BonusesResponse = {
+  items: BonusDto[];
+  summary: BonusesSummaryDto;
+};
+
+async function fetchBonusesCanonically(): Promise<BonusesResponse> {
+  const hdrs = await headers();
+  const host = hdrs.get("host");
+  if (!host) {
+    throw new Error("my-bonus: cannot resolve host from incoming request");
+  }
+  const protocol = hdrs.get("x-forwarded-proto") ?? "http";
+  const cookieStr = (await cookies()).toString();
+  const res = await fetch(`${protocol}://${host}/api/v1/bonuses`, {
+    headers: { cookie: cookieStr },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`GET /api/v1/bonuses → ${res.status}`);
+  }
+  return (await res.json()) as BonusesResponse;
+}
+
 export default async function MyBonusPage() {
   const claims = await enforcePageRole(["seller", "driver"]);
-
-  const { items, summary } = await withRead(undefined, (db) =>
-    listBonuses(
-      db,
-      { limit: 100, offset: 0 },
-      { userId: claims.userId, username: claims.username, role: claims.role },
-    ),
-  );
+  const { items, summary } = await fetchBonusesCanonically();
 
   return (
     <div className="space-y-4">
