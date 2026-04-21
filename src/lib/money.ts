@@ -52,3 +52,19 @@ export function moneyEquals(a: number, b: number): boolean {
 export function moneySum(values: number[]): number {
   return round2(values.reduce((acc, v) => acc + v, 0));
 }
+
+/**
+ * Phase 4.3.1/4.3.2 — strict 2-decimal precision predicate used by money-
+ * mutating Zod DTOs (TransferInput, ReconcileInput, HandoverInput,
+ * ConfirmDeliveryInput). Accepts values whose (v * 100) is an integer within
+ * a float-safe epsilon. Rejects 0.001 / 0.004 / 0.005 / 10.004 etc.; accepts
+ * 0, 0.01, 10.00, 10.50, 99.99, … regardless of JS serialisation quirks.
+ *
+ * Rationale: without this predicate, a sub-cent amount survives Zod and hits
+ * the service layer, where `round2` collapses it to 0.00 and a zero-value
+ * movement/payment row gets inserted. The refine makes that unreachable from
+ * the wire.
+ */
+export function isTwoDecimalPrecise(v: number): boolean {
+  return Math.abs(v * 100 - Math.round(v * 100)) < 1e-9;
+}

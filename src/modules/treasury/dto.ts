@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isTwoDecimalPrecise } from "@/lib/money";
 
 // Phase 4.2 — treasury DTOs.
 //
@@ -43,11 +44,19 @@ export type TreasuryMovementDto = z.infer<typeof TreasuryMovementDto>;
 // - Manager caller: `driverUserId` required; the driver must have
 //   manager_id = caller.userId (enforced by service).
 // - notes optional, up to 2048 chars (matches other mutation DTOs).
+//
+// Phase 4.3.2 — strict 2-decimal precision on amount: sub-cent values
+// (0.004, 0.005, …) are rejected at the schema layer before reaching
+// `round2` in the service, which would otherwise collapse them to 0.00 and
+// silently insert a zero-value movement row.
 export const HandoverInput = z.object({
   amount: z
     .number()
     .positive()
-    .max(1_000_000), // BR-55b cap is far below this; this is a sanity ceiling only.
+    .max(1_000_000) // BR-55b cap is far below this; this is a sanity ceiling only.
+    .refine(isTwoDecimalPrecise, {
+      message: "المبلغ يجب أن يكون بدقة سنتين (2 decimals max).",
+    }),
   driverUserId: z.number().int().positive().optional(),
   notes: z.string().max(2048).default(""),
 });
@@ -63,12 +72,9 @@ export type HandoverInput = z.infer<typeof HandoverInput>;
 // is REJECTED at the schema layer. Rationale: after `round2(0.004) = 0.00`
 // the service layer would otherwise silently insert a zero-value movement
 // row. The refine below makes that scenario unreachable from the wire.
-function isTwoDecimalPrecise(v: number): boolean {
-  // Accept values whose (v * 100) is integer within a float-safe epsilon.
-  // This rejects 0.001 / 0.004 / 0.005 / 10.004 etc., and accepts 0.00,
-  // 0.01, 10.00, 10.50, 99.99, … regardless of how JS serialises them.
-  return Math.abs(v * 100 - Math.round(v * 100)) < 1e-9;
-}
+//
+// Phase 4.3.2 — predicate promoted to `@/lib/money` so transfer / reconcile
+// / handover / confirm-delivery all share the exact same check.
 
 export const TransferInput = z.object({
   fromAccountId: z.number().int().positive(),

@@ -16,6 +16,7 @@ import {
 import { logActivity } from "@/lib/activity-log";
 import { validateD35Readiness } from "@/modules/invoices/d35-gate";
 import { issueInvoiceInTx } from "@/modules/invoices/issue";
+import { round2 } from "@/lib/money";
 import { bridgeCollection } from "@/modules/treasury/service";
 import { ensureDriverAssigned } from "./assign";
 import { computeBonusesOnConfirm } from "./bonuses";
@@ -155,21 +156,42 @@ export async function confirmDelivery(
   const order = orderRows[0];
   const paymentMethod = input.paymentMethod ?? order.payment_method;
 
+  // Phase 4.3.2 — round the incoming paidAmount ONCE and use the rounded
+  // value for every downstream decision and write (OVERPAYMENT check,
+  // BR-07 check, paidAmount>0 branch gate, bridgeCollection, payments
+  // insert, orders.advance_paid update, activity_log). This closes the
+  // sub-cent drift where Zod-refine is bypassed by an internal caller:
+  // a raw 0.004 cannot spawn a payment row or treasury_movement now.
+  //
+  // Defense-in-depth: if the caller sent a positive amount that collapses
+  // to < 0.01 after rounding (must be a bypassed Zod path), reject
+  // outright instead of silently dropping to the paidAmount=0 branch.
+  const paidAmount = round2(input.paidAmount);
+  if (input.paidAmount > 0 && paidAmount < 0.01) {
+    throw new BusinessRuleError(
+      "المبلغ المدفوع يجب أن يكون 0.01€ على الأقل.",
+      "VALIDATION_FAILED",
+      400,
+      "confirmDelivery: rounded paidAmount below 0.01 (sub-cent)",
+      { rawPaidAmount: input.paidAmount, roundedPaidAmount: paidAmount },
+    );
+  }
+
   // BR-07 + BR-09: cash/bank must be paid in full at delivery; paid can never
   // exceed the outstanding remaining. 0.005€ tolerance matches BR-09 spec.
   const totalAmount = Number(order.total_amount);
   const advancePaid = Number(order.advance_paid);
   const remaining = totalAmount - advancePaid;
-  if (input.paidAmount > remaining + 0.005) {
+  if (paidAmount > remaining + 0.005) {
     throw new ConflictError(
-      `المبلغ المدفوع (${input.paidAmount.toFixed(2)}€) يتجاوز المتبقي على الطلب (${remaining.toFixed(2)}€).`,
+      `المبلغ المدفوع (${paidAmount.toFixed(2)}€) يتجاوز المتبقي على الطلب (${remaining.toFixed(2)}€).`,
       "OVERPAYMENT",
-      { paidAmount: input.paidAmount, remaining, orderId: order.id },
+      { paidAmount, remaining, orderId: order.id },
     );
   }
   if (
     paymentMethod !== "آجل" &&
-    Math.abs(input.paidAmount - remaining) > 0.005
+    Math.abs(paidAmount - remaining) > 0.005
   ) {
     throw new BusinessRuleError(
       `الدفع بـ"${paymentMethod}" يستوجب تسديد المتبقي كاملاً عند التسليم (${remaining.toFixed(2)}€).`,
@@ -178,7 +200,7 @@ export async function confirmDelivery(
       undefined,
       {
         paymentMethod,
-        paidAmount: input.paidAmount,
+        paidAmount,
         remaining,
         orderId: order.id,
       },
@@ -242,11 +264,11 @@ export async function confirmDelivery(
   // confirm with paidAmount=0; delivery still succeeds.
   // Phase 4.2: bridge to treasury FIRST — BR-55b cap check + BR-55 movement
   // happen before the payments insert so a cap breach rolls back everything.
-  if (input.paidAmount > 0) {
+  if (paidAmount > 0) {
     await bridgeCollection(tx, {
       orderId: order.id,
       driverUserId: driver.id,
-      amount: input.paidAmount,
+      amount: paidAmount,
       confirmDate,
       createdBy: claims.username,
     });
@@ -258,12 +280,12 @@ export async function confirmDelivery(
       date: confirmDate,
       type: "collection",
       paymentMethod,
-      amount: input.paidAmount.toFixed(2),
+      amount: paidAmount.toFixed(2),
       notes: input.notes,
       createdBy: claims.username,
     });
 
-    const newAdvance = Number(order.advance_paid) + input.paidAmount;
+    const newAdvance = round2(Number(order.advance_paid) + paidAmount);
     const paymentStatus =
       newAdvance >= Number(order.total_amount) - 0.005
         ? "paid"
@@ -311,7 +333,7 @@ export async function confirmDelivery(
     username: claims.username,
     details: {
       orderId: order.id,
-      paidAmount: input.paidAmount,
+      paidAmount,
       paymentMethod,
       sellerBonusRows: bonusResult.sellerRowsInserted,
       driverBonusRow: bonusResult.driverRowInserted,

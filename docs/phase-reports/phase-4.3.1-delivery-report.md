@@ -5,6 +5,17 @@
 
 ---
 
+## §0 Errata (Phase 4.3.2 — 2026-04-21)
+
+The precision fix in this report covers only **POST /api/v1/treasury/transfer** and **POST /api/v1/treasury/reconcile**. Post-delivery review of Phase 4.3.1 (2026-04-21) revealed two additional money-mutating endpoints still vulnerable to the same sub-cent drift:
+
+- [`src/modules/treasury/dto.ts:46-54`](../../src/modules/treasury/dto.ts#L46-L54) — `HandoverInput.amount` had no 2-decimal refine. `0.004` passed Zod → `round2(0.004)=0.00` → handover inserted a zero-value `driver_handover` movement row.
+- [`src/modules/deliveries/dto.ts:46`](../../src/modules/deliveries/dto.ts#L46) — `ConfirmDeliveryInput.paidAmount` had no 2-decimal refine. `0.004` passed Zod → inside `confirm.ts` the `paidAmount > 0` branch fired → bridge inserted a zero-value `sale_collection` movement + payment row with `amount='0.00'`.
+
+**Fix tranche**: Phase 4.3.2 — see [`docs/phase-reports/phase-4.3.2-delivery-report.md`](./phase-4.3.2-delivery-report.md). Scope: promote `isTwoDecimalPrecise` from this file to `src/lib/money.ts` (shared), apply to both DTOs above, add matching service-level defense on `performHandover` and `confirmDelivery`, round `paidAmount` once in `confirm.ts` and reuse the rounded value across OVERPAYMENT check, BR-07 check, `paidAmount > 0` branch gate, `bridgeCollection`, payments insert, `orders.advance_paid` update, and activity log. Closes the precision family for Phase 4.
+
+---
+
 ## 0. Implementation Contract (accepted 2026-04-21)
 
 **Defects verified with file+line before coding**:

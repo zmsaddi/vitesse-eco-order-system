@@ -124,6 +124,22 @@ export async function performHandover(
   }
 
   const amount = round2(input.amount);
+
+  // Phase 4.3.2 — defense-in-depth on the service layer. Zod's refine at the
+  // DTO rejects sub-cent inputs at the wire; this guard catches any caller
+  // that bypasses Zod (internal invocation, future transport). A zero-value
+  // movement row must be unreachable in all paths — D-58 append-only + BR-55
+  // contracts both assume every movement represents real money.
+  if (amount < 0.01) {
+    throw new BusinessRuleError(
+      "المبلغ يجب أن يكون 0.01€ على الأقل.",
+      "VALIDATION_FAILED",
+      400,
+      "performHandover: rounded amount below 0.01 (sub-cent)",
+      { rawAmount: input.amount, roundedAmount: amount },
+    );
+  }
+
   const custodyBalance = parseNumeric(custody.balance);
   if (amount > custodyBalance + 0.005) {
     throw new ConflictError(
