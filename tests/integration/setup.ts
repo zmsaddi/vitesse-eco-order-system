@@ -54,6 +54,82 @@ loadDotenvLocal();
 export const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL ?? "";
 export const HAS_DB = TEST_DATABASE_URL.length > 0;
 
+// Phase 4.2 — wire a manager + N drivers with treasury accounts in one call.
+// confirm-delivery now bridges every collected payment to driver_custody
+// (BR-55), and drivers without manager_id + driver_custody are rejected with
+// CUSTODY_DRIVER_UNLINKED. Tests that previously inserted driver users
+// directly via `tx.insert(users)` must now also wire the treasury chain.
+//
+// Use:
+//   const { managerId, driverIds } = await wireManagerAndDrivers(tx, {
+//     managerSuffix: "x",
+//     driverSuffixes: ["a", "b"],
+//     passwordHash: hash,
+//   });
+//
+// The returned ids are usable directly in subsequent tests (claims, etc).
+export type WireManagerArgs = {
+  managerSuffix: string;
+  driverSuffixes: string[];
+  passwordHash: string;
+};
+
+export async function wireManagerAndDrivers(
+  tx: import("@/db/client").DbTx,
+  args: WireManagerArgs,
+): Promise<{ managerId: number; driverIds: number[] }> {
+  const { users, treasuryAccounts } = await import("@/db/schema");
+  const mgr = await tx
+    .insert(users)
+    .values({
+      username: `mgr-${args.managerSuffix}`,
+      password: args.passwordHash,
+      name: `Manager ${args.managerSuffix}`,
+      role: "manager",
+      active: true,
+    })
+    .returning({ id: users.id });
+  const managerId = mgr[0].id;
+  const box = await tx
+    .insert(treasuryAccounts)
+    .values({
+      type: "manager_box",
+      name: `صندوق Manager ${args.managerSuffix}`,
+      ownerUserId: managerId,
+      parentAccountId: null,
+      balance: "0",
+      active: 1,
+    })
+    .returning({ id: treasuryAccounts.id });
+  const managerBoxId = box[0].id;
+
+  const driverIds: number[] = [];
+  for (const sfx of args.driverSuffixes) {
+    const drv = await tx
+      .insert(users)
+      .values({
+        username: `drv-${sfx}`,
+        password: args.passwordHash,
+        name: `Driver ${sfx}`,
+        role: "driver",
+        active: true,
+        managerId,
+      })
+      .returning({ id: users.id });
+    const driverId = drv[0].id;
+    await tx.insert(treasuryAccounts).values({
+      type: "driver_custody",
+      name: `عهدة Driver ${sfx}`,
+      ownerUserId: driverId,
+      parentAccountId: managerBoxId,
+      balance: "0",
+      active: 1,
+    });
+    driverIds.push(driverId);
+  }
+  return { managerId, driverIds };
+}
+
 // Phase 4.1 — D-35 readiness seed. `confirmDelivery` now validates every key in
 // D35_REQUIRED_SETTINGS at the top of its tx, so any integration test that
 // exercises confirm-delivery must seed these settings in its beforeAll. Each

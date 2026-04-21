@@ -16,6 +16,7 @@ import {
 import { logActivity } from "@/lib/activity-log";
 import { validateD35Readiness } from "@/modules/invoices/d35-gate";
 import { issueInvoiceInTx } from "@/modules/invoices/issue";
+import { bridgeCollection } from "@/modules/treasury/service";
 import { ensureDriverAssigned } from "./assign";
 import { computeBonusesOnConfirm } from "./bonuses";
 import { deliveryRowToDto } from "./mappers";
@@ -239,7 +240,17 @@ export async function confirmDelivery(
 
   // 4. Collection payment row (signed positive per D-06). Credit sales may
   // confirm with paidAmount=0; delivery still succeeds.
+  // Phase 4.2: bridge to treasury FIRST — BR-55b cap check + BR-55 movement
+  // happen before the payments insert so a cap breach rolls back everything.
   if (input.paidAmount > 0) {
+    await bridgeCollection(tx, {
+      orderId: order.id,
+      driverUserId: driver.id,
+      amount: input.paidAmount,
+      confirmDate,
+      createdBy: claims.username,
+    });
+
     await tx.insert(payments).values({
       orderId: order.id,
       clientId: order.client_id,

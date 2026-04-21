@@ -147,7 +147,12 @@ export class CustodyCapExceededError extends BusinessRuleError {
 | `VIN_DUPLICATE` | رقم VIN ({vin}) مُستخدَم على طلب آخر نشط | VIN {vin} found on active order_item {id} (order not cancelled/deleted) — Phase 3.1.1 | 409 |
 | `SKU_LIMIT_REACHED` | وصلت الحد الأقصى للمنتجات النشطة ({limit}). عطِّل منتجاً قبل إضافة جديد | COUNT(products WHERE active=true) >= {limit} | 400 |
 | `MAX_IMAGES_REACHED` | لا يمكن إضافة أكثر من {max} صور لكل منتج | product_images count for product_id={id} >= {max} | 400 |
-| `CUSTODY_CAP_EXCEEDED` | تجاوزت السقف النقدي. سلِّم الأموال لمديرك أولاً | driver_custody.balance+new={total} > cap={cap} | 409 |
+| `CUSTODY_CAP_EXCEEDED` | تجاوزت السقف النقدي. سلِّم الأموال لمديرك أولاً | BR-55b enforced inside confirm-delivery bridge: driver_custody.balance + paidAmount > settings.driver_custody_cap_eur | 409 |
+| `INSUFFICIENT_CUSTODY` | لا يمكن تسليم مبلغ يتجاوز رصيد العهدة | POST /api/v1/treasury/handover: amount > driver_custody.balance under FOR UPDATE | 409 |
+| `CUSTODY_DRIVER_UNLINKED` | لا يمكن تنفيذ عملية الصندوق: السائق غير مرتبط بمدير | confirm-delivery bridge OR handover: drv.manager_id IS NULL OR driver_custody missing | 409 |
+| `DRIVER_MANAGER_REQUIRED` | السائقون النشطون يجب أن يكونوا مرتبطين بمدير | users createUser/updateUser: role='driver' AND active=true AND manager_id IS NULL | 400 |
+| `INVALID_MANAGER` | المستخدم المحدد ليس مديراً نشطاً | users service validateManagerLink: manager_id references user not (role='manager' AND active) | 400 |
+| `MANAGER_BOX_MISSING` | لا يوجد صندوق للمدير المقصود | Handover or driver-custody auto-wiring: manager_box for the target manager not found (defense-in-depth — bootstrap should always create it) | 409 |
 | `OVERLAPPING_PERIOD` | فترة التوزيع متداخلة مع فترة موجودة | profit_distribution_groups overlap detected | 409 |
 | `CRON_UNAUTHORIZED` | **(لا يُعرض — server-only)** | CRON_SECRET mismatch or missing | 401 |
 

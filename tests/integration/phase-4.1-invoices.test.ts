@@ -1,6 +1,12 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
-import { HAS_DB, TEST_DATABASE_URL, applyMigrations, resetSchema } from "./setup";
+import {
+  HAS_DB,
+  TEST_DATABASE_URL,
+  applyMigrations,
+  resetSchema,
+  wireManagerAndDrivers,
+} from "./setup";
 
 // Phase 4.1 — invoice core.
 //
@@ -117,19 +123,16 @@ describe.skipIf(!HAS_DB)("Phase 4.1 invoice core (requires TEST_DATABASE_URL)", 
           .insert(users)
           .values({ username: "sel-41b", password: hash, name: "Seller 41b", role: "seller", active: true })
           .returning();
-        const d1 = await tx
-          .insert(users)
-          .values({ username: "drv-41", password: hash, name: "Driver 41", role: "driver", active: true })
-          .returning();
-        const d2 = await tx
-          .insert(users)
-          .values({ username: "drv-41b", password: hash, name: "Driver 41b", role: "driver", active: true })
-          .returning();
         const sk = await tx
           .insert(users)
           .values({ username: "sk-41", password: hash, name: "SK 41", role: "stock_keeper", active: true })
           .returning();
-        return [s1[0].id, s2[0].id, d1[0].id, d2[0].id, sk[0].id];
+        const wired = await wireManagerAndDrivers(tx, {
+          managerSuffix: "p41",
+          driverSuffixes: ["41", "41b"],
+          passwordHash: hash,
+        });
+        return [s1[0].id, s2[0].id, wired.driverIds[0], wired.driverIds[1], sk[0].id];
       },
     );
 

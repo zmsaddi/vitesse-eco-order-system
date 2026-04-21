@@ -6,6 +6,7 @@ import {
   TEST_DATABASE_URL,
   applyMigrations,
   resetSchema,
+  wireManagerAndDrivers,
 } from "./setup";
 
 // D-58 immutability triggers (`invoices_no_update`, `invoice_lines_no_update`)
@@ -122,11 +123,12 @@ describe.skipIf(!HAS_DB)("Phase 4.1.2 — D-37 completeness (requires TEST_DATAB
         .insert(users)
         .values({ username: "sel-412", password: hash, name: "Seller 412", role: "seller", active: true })
         .returning();
-      const d = await tx
-        .insert(users)
-        .values({ username: "drv-412", password: hash, name: "Driver 412", role: "driver", active: true })
-        .returning();
-      return [s[0].id, d[0].id];
+      const wired = await wireManagerAndDrivers(tx, {
+        managerSuffix: "p412",
+        driverSuffixes: ["412"],
+        passwordHash: hash,
+      });
+      return [s[0].id, wired.driverIds[0]];
     });
 
     clientId = (

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { count } from "drizzle-orm";
 import { withTxInRoute } from "@/db/client";
-import { users } from "@/db/schema";
+import { treasuryAccounts, users } from "@/db/schema";
 import { seedPermissions, seedSettings } from "@/db/seed";
 import { hashPassword } from "@/lib/password";
 import { env } from "@/lib/env";
@@ -91,17 +91,47 @@ export async function POST(request: NextRequest) {
       const adminPassword = generateRandomPassword();
       const adminHash = await hashPassword(adminPassword);
 
-      await tx.insert(users).values({
-        username: "admin",
-        password: adminHash,
-        name: "مدير المشروع",
-        role: "pm",
-        active: true,
-        profitSharePct: "0",
-      });
+      const adminInserted = await tx
+        .insert(users)
+        .values({
+          username: "admin",
+          password: adminHash,
+          name: "مدير المشروع",
+          role: "pm",
+          active: true,
+          profitSharePct: "0",
+        })
+        .returning({ id: users.id });
+      const adminId = adminInserted[0].id;
 
       const permCount = await seedPermissions(tx);
       const settingsCount = await seedSettings(tx);
+
+      // Phase 4.2 — bootstrap GM-level accounts (BR-52 hierarchy root).
+      // Owned by admin (role=pm acts as GM in this deployment). Idempotent:
+      // only inserts if the (owner, type) pair is absent. manager_box and
+      // driver_custody are NOT seeded here — they are auto-created by the
+      // users service on create/update (Phase 4.2 users-service logic).
+      await tx
+        .insert(treasuryAccounts)
+        .values([
+          {
+            type: "main_cash",
+            name: "صندوق الكاش الرئيسي",
+            ownerUserId: adminId,
+            parentAccountId: null,
+            balance: "0",
+            active: 1,
+          },
+          {
+            type: "main_bank",
+            name: "الصندوق البنكي الرئيسي",
+            ownerUserId: adminId,
+            parentAccountId: null,
+            balance: "0",
+            active: 1,
+          },
+        ]);
 
       // Log password ONCE to stdout — operator capture.
       console.warn(

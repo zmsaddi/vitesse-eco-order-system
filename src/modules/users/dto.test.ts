@@ -27,6 +27,7 @@ describe("users DTO validators (D-69)", () => {
         profitSharePct: 10,
         profitShareStart: "2026-01-01",
         onboardedAt: "2026-04-19T12:00:00.000Z",
+        managerId: null,
         createdAt: "2026-04-19T10:00:00.000Z",
       };
       expect(UserDto.safeParse(input).success).toBe(true);
@@ -41,6 +42,7 @@ describe("users DTO validators (D-69)", () => {
         active: true,
         profitShareStart: null,
         onboardedAt: null,
+        managerId: null,
         createdAt: "2026-04-19T10:00:00.000Z",
       };
       expect(UserDto.safeParse({ ...base, profitSharePct: -1 }).success).toBe(false);
@@ -58,6 +60,23 @@ describe("users DTO validators (D-69)", () => {
         profitSharePct: 0,
         profitShareStart: null,
         onboardedAt: null,
+        managerId: null,
+        createdAt: "2026-04-19T10:00:00.000Z",
+      });
+      expect(parsed.success).toBe(true);
+    });
+
+    it("accepts a driver with a concrete managerId", () => {
+      const parsed = UserDto.safeParse({
+        id: 1,
+        username: "driver1",
+        name: "سائق",
+        role: "driver",
+        active: true,
+        profitSharePct: 0,
+        profitShareStart: null,
+        onboardedAt: null,
+        managerId: 5,
         createdAt: "2026-04-19T10:00:00.000Z",
       });
       expect(parsed.success).toBe(true);

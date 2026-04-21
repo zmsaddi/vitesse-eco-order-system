@@ -6,6 +6,7 @@ import {
   TEST_DATABASE_URL,
   applyMigrations,
   resetSchema,
+  wireManagerAndDrivers,
 } from "./setup";
 
 // Phase 4.0 — deliveries core + driver-tasks + collection + bonus computation.
@@ -66,26 +67,6 @@ describe.skipIf(!HAS_DB)("Phase 4.0 deliveries + bonuses (requires TEST_DATABASE
             active: true,
           })
           .returning();
-        const driver = await tx
-          .insert(users)
-          .values({
-            username: "drv-4a",
-            password: hash,
-            name: "Driver 4A",
-            role: "driver",
-            active: true,
-          })
-          .returning();
-        const driver2 = await tx
-          .insert(users)
-          .values({
-            username: "drv-4b",
-            password: hash,
-            name: "Driver 4B",
-            role: "driver",
-            active: true,
-          })
-          .returning();
         const sk = await tx
           .insert(users)
           .values({
@@ -96,7 +77,14 @@ describe.skipIf(!HAS_DB)("Phase 4.0 deliveries + bonuses (requires TEST_DATABASE
             active: true,
           })
           .returning();
-        return [seller[0].id, driver[0].id, driver2[0].id, sk[0].id];
+        // Phase 4.2 — drivers must have manager_id + driver_custody for the
+        // confirm-delivery → treasury bridge.
+        const wired = await wireManagerAndDrivers(tx, {
+          managerSuffix: "4",
+          driverSuffixes: ["4a", "4b"],
+          passwordHash: hash,
+        });
+        return [seller[0].id, wired.driverIds[0], wired.driverIds[1], sk[0].id];
       },
     );
 

@@ -1,4 +1,16 @@
-import { boolean, check, date, integer, numeric, pgTable, serial, text, timestamp, unique } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  check,
+  date,
+  integer,
+  numeric,
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  unique,
+  type AnyPgColumn,
+} from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { ROLES } from "./enums";
 
@@ -15,6 +27,11 @@ export const users = pgTable(
     profitSharePct: numeric("profit_share_pct", { precision: 5, scale: 2 }).notNull().default("0"),
     profitShareStart: date("profit_share_start"),
     onboardedAt: timestamp("onboarded_at", { withTimezone: true }), // D-49
+    // Phase 4.2: single manager link for driver custody / team isolation.
+    // Only meaningful when role='driver'. Enforced at service layer (DRIVER_MANAGER_REQUIRED).
+    managerId: integer("manager_id").references((): AnyPgColumn => users.id, {
+      onDelete: "restrict",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

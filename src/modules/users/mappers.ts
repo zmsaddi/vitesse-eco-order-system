@@ -17,6 +17,7 @@ export function userRowToDto(row: UserRow): UserDto {
     profitSharePct: toNumber(row.profitSharePct),
     profitShareStart: row.profitShareStart ?? null,
     onboardedAt: row.onboardedAt?.toISOString() ?? null,
+    managerId: row.managerId ?? null,
     createdAt: row.createdAt.toISOString(),
   };
 }

@@ -6,6 +6,7 @@ import {
   TEST_DATABASE_URL,
   applyMigrations,
   resetSchema,
+  wireManagerAndDrivers,
 } from "./setup";
 
 // Phase 4.0.1 — corrective tranche for the 4 issues flagged on Phase 4.0:
@@ -66,27 +67,12 @@ describe.skipIf(!HAS_DB)("Phase 4.0.1 corrective fixes (requires TEST_DATABASE_U
           active: true,
         })
         .returning();
-      const driver = await tx
-        .insert(users)
-        .values({
-          username: "drv-41a",
-          password: hash,
-          name: "Driver 41A",
-          role: "driver",
-          active: true,
-        })
-        .returning();
-      const driver2 = await tx
-        .insert(users)
-        .values({
-          username: "drv-41b",
-          password: hash,
-          name: "Driver 41B",
-          role: "driver",
-          active: true,
-        })
-        .returning();
-      return [seller[0].id, driver[0].id, driver2[0].id];
+      const wired = await wireManagerAndDrivers(tx, {
+        managerSuffix: "41",
+        driverSuffixes: ["41a", "41b"],
+        passwordHash: hash,
+      });
+      return [seller[0].id, wired.driverIds[0], wired.driverIds[1]];
     });
 
     clientId = (

@@ -64,6 +64,13 @@
       "when": 1776722208225,
       "tag": "0008_invoice_lines_hash_chain",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1776753237690,
+      "tag": "0009_users_manager_id",
+      "breakpoints": true
     }
   ]
 }

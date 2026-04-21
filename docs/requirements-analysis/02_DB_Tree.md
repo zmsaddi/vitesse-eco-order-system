@@ -53,9 +53,11 @@
 | profit_share_pct | NUMERIC(5,2) | DEFAULT 0 |
 | profit_share_start | DATE | NULL |
 | onboarded_at | TIMESTAMPTZ | NULL (D-49 — أول welcome modal يُعرض حتى يصبح NOT NULL) |
+| manager_id | INTEGER | NULL → FK users.id ON DELETE RESTRICT — Phase 4.2: required at the service layer for active drivers (DRIVER_MANAGER_REQUIRED). Other roles may leave NULL. |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() |
 
 **CHECK**: `role IN ('pm','gm','manager','seller','driver','stock_keeper')`
+**Service-layer rule (Phase 4.2)**: `role='driver' AND active=true ⇒ manager_id IS NOT NULL`. Legacy drivers without manager_id are grandfathered, but treasury operations on them are rejected with `CUSTODY_DRIVER_UNLINKED`.
 
 ---
 
@@ -643,14 +645,23 @@ CHECK (key IN (
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
+| type | TEXT | NOT NULL — `main_cash` \| `main_bank` \| `manager_box` \| `driver_custody` |
 | name | TEXT | NOT NULL |
-| type | TEXT | NOT NULL |
-| owner_username | TEXT | NULL |
-| parent_account_id | INTEGER | NULL → FK treasury_accounts.id |
-| balance | NUMERIC(19,2) | DEFAULT 0 |
-| last_reconciled_at | TIMESTAMPTZ | NULL |
+| owner_user_id | INTEGER | NULL → FK users.id ON DELETE RESTRICT — Phase 4.2: integer FK (replaces earlier `owner_username` text design) |
+| parent_account_id | INTEGER | NULL (self-ref nullable) |
+| balance | NUMERIC(19,2) | NOT NULL DEFAULT 0 |
+| active | INTEGER | NOT NULL DEFAULT 1 |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT NOW() |
 
-**CHECK**: `type IN ('main_cash','main_bank','manager_box','driver_custody')`
+**CHECK**: schema enforces `type` via application code (no DB-level CHECK on `type` today; see schema [src/db/schema/treasury.ts](../../src/db/schema/treasury.ts)).
+
+**Bootstrap (Phase 4.2)**:
+- `/api/init` creates `main_cash` + `main_bank` rows (owner = admin / pm).
+- Creating a user with `role='manager'` ⇒ users service idempotently creates the corresponding `manager_box`.
+- Creating a user with `role='driver'` and `manager_id` set ⇒ users service idempotently creates the corresponding `driver_custody` parented to the manager's `manager_box`.
+- Updating a driver's `manager_id` ⇒ rebinds `driver_custody.parent_account_id`; never creates a duplicate.
+- Disabling a user or changing role ⇒ accounts are NOT deleted; treasury operations on them are gated at the service layer.
+- Migration `0009_users_manager_id.sql` backfills `manager_box` for every existing `role='manager'` AND `active=true` user that lacks one.
 
 ---
 
@@ -659,22 +670,24 @@ CHECK (key IN (
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | SERIAL | PRIMARY KEY |
-| from_account_id | INTEGER | NULL → FK treasury_accounts.id |
-| to_account_id | INTEGER | NULL → FK treasury_accounts.id |
-| type | TEXT | NOT NULL |
-| amount | NUMERIC(19,2) | NOT NULL |
-| date | DATE | NOT NULL |
+| date | TEXT | NOT NULL — Paris ISO YYYY-MM-DD |
 | category | TEXT | NOT NULL |
+| from_account_id | INTEGER | NULL → FK treasury_accounts.id ON DELETE RESTRICT |
+| to_account_id | INTEGER | NULL → FK treasury_accounts.id ON DELETE RESTRICT |
+| amount | NUMERIC(19,2) | NOT NULL — signed |
 | reference_type | TEXT | NULL |
 | reference_id | INTEGER | NULL |
-| description | TEXT | DEFAULT '' |
 | notes | TEXT | DEFAULT '' |
 | created_by | TEXT | NOT NULL |
-| created_at | TIMESTAMPTZ | DEFAULT NOW() |
-| reconciled | BOOLEAN | DEFAULT false |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT NOW() |
 
-**CHECK**: `type IN ('inflow','outflow','transfer','reconciliation')`
-**CHECK**: `category IN ('sale_collection','supplier_payment','expense','settlement','reward','profit_distribution','driver_handover','manager_settlement','funding','bank_deposit','bank_withdrawal','refund','reconciliation')` (D-10 — `supplier_credit` محذوف؛ الرصيد الدائن يُدار في `suppliers.credit_due_from_supplier` — rename D-62)
+**Categories used so far**:
+- `sale_collection` (Phase 4.2): inflow from confirm-delivery; `from_account_id = NULL`, `to_account_id = driver_custody`. Logged inside the same tx as confirm-delivery via [src/modules/treasury/bridge.ts](../../src/modules/treasury/bridge.ts).
+- `driver_handover` (Phase 4.2): transfer; `from = driver_custody`, `to = manager_box`. Logged via [src/modules/treasury/handover.ts](../../src/modules/treasury/handover.ts).
+
+**Reserved categories (later tranches)**: `supplier_payment`, `expense`, `settlement`, `reward`, `profit_distribution`, `manager_settlement`, `funding`, `bank_deposit`, `bank_withdrawal`, `refund`, `reconciliation`. (D-10 — `supplier_credit` removed; managed in `suppliers.credit_due_from_supplier`.)
+
+**Append-only (D-58)**: `treasury_movements_no_update` trigger in `0001_immutable_audits.sql` rejects every UPDATE. Hash-chain on this table is intentionally NOT yet implemented (deferred).
 
 ---
 

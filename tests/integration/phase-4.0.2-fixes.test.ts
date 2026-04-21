@@ -6,6 +6,7 @@ import {
   TEST_DATABASE_URL,
   applyMigrations,
   resetSchema,
+  wireManagerAndDrivers,
 } from "./setup";
 
 // Phase 4.0.2 — accounting-date correctness for confirm-delivery.
@@ -80,17 +81,12 @@ describe.skipIf(!HAS_DB)("Phase 4.0.2 — confirm-date accounting invariants (re
           active: true,
         })
         .returning();
-      const driver = await tx
-        .insert(users)
-        .values({
-          username: "drv-42",
-          password: hash,
-          name: "Driver 42",
-          role: "driver",
-          active: true,
-        })
-        .returning();
-      return [seller[0].id, driver[0].id];
+      const wired = await wireManagerAndDrivers(tx, {
+        managerSuffix: "402",
+        driverSuffixes: ["42"],
+        passwordHash: hash,
+      });
+      return [seller[0].id, wired.driverIds[0]];
     });
 
     clientId = (

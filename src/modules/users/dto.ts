@@ -14,6 +14,9 @@ export const UserDto = z.object({
   profitSharePct: z.number().min(0).max(100),
   profitShareStart: z.string().nullable(), // YYYY-MM-DD
   onboardedAt: z.string().nullable(), // ISO timestamp
+  // Phase 4.2 — only meaningful when role='driver'. Active drivers MUST
+  // have a managerId (enforced at service layer via DRIVER_MANAGER_REQUIRED).
+  managerId: z.number().int().positive().nullable(),
   createdAt: z.string(), // ISO timestamp
 });
 export type UserDto = z.infer<typeof UserDto>;
@@ -30,6 +33,8 @@ export const CreateUserInput = z.object({
   role: RoleDto,
   profitSharePct: z.number().min(0).max(100).default(0),
   profitShareStart: z.string().nullable().default(null),
+  // Phase 4.2 — driver create/update must supply managerId; other roles may omit.
+  managerId: z.number().int().positive().nullable().default(null),
 });
 export type CreateUserInput = z.infer<typeof CreateUserInput>;
 
@@ -43,6 +48,7 @@ export const UpdateUserPatch = z
     active: z.boolean().optional(),
     profitSharePct: z.number().min(0).max(100).optional(),
     profitShareStart: z.string().nullable().optional(),
+    managerId: z.number().int().positive().nullable().optional(),
   })
   .refine((patch) => Object.keys(patch).length > 0, {
     message: "يجب تمرير حقل واحد على الأقل للتعديل",

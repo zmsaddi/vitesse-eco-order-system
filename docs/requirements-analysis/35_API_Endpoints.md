@@ -107,10 +107,10 @@
 | `/api/v1/invoices` | GET | الكل (مفلتر) | جلب الفواتير (pagination إلزامي) |
 | `/api/v1/invoices/[id]/pdf` | GET | الكل | PDF فاتورة (فرنسي، FAC-YYYY-MM-NNNN — D-01) |
 | `/api/v1/invoices/[id]/avoir` | POST | pm,gm | إصدار Avoir (credit note) — فاتورة عكسية بمبلغ سالب، لا يُحذف الأصل (H7 محاسبياً صحيح) |
-| `/api/v1/treasury` | GET | pm,gm,manager(صندوقي),driver(عهدتي) | أرصدة + حركات |
-| `/api/v1/treasury/transfer` | POST | pm,gm | تحويل بين صناديق |
-| `/api/v1/treasury/reconcile` | POST | pm,gm,manager | تسوية يومية |
-| `/api/v1/treasury/handover` | POST | driver(تسليم),manager(استلام) | تسليم أموال |
+| `/api/v1/treasury` | GET | pm,gm,manager(صندوقي + عهدات فريقي),driver(عهدتي) | Phase 4.2 — أرصدة + حركات. Response: `{ accounts, movements, movementsTotal }`. Manager filter يستخدم `users.manager_id` لتحديد فريق المدير (لا cross-team). seller/stock_keeper → 403. |
+| `/api/v1/treasury/transfer` | POST | pm,gm | تحويل بين صناديق — **خارج Phase 4.2** (tranche لاحقة) |
+| `/api/v1/treasury/reconcile` | POST | pm,gm,manager | تسوية يومية — **خارج Phase 4.2** (tranche لاحقة) |
+| `/api/v1/treasury/handover` | POST | driver(تسليم), manager(استلام لسائق تابع له) | Phase 4.2 — driver_custody → manager_box حصراً، `category='driver_handover'`. Body: `{ amount, driverUserId?, notes? }`. Driver caller: `driverUserId` يُتجاهَل ويُفرض = own userId. Manager caller: `driverUserId` إلزامي و`drv.manager_id === manager.userId` (server-enforced). `Idempotency-Key` **إلزامي** (D-79). |
 | `/api/v1/settlements` | GET | pm,gm,manager | قائمة التسويات (pagination) |
 | `/api/v1/settlements` | POST | pm,gm | التسويات والمكافآت (`Idempotency-Key` إلزامي) |
 | `/api/v1/distributions` | GET | pm,gm,manager(👁) | توزيعات الأرباح |
