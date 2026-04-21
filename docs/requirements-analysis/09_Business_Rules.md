@@ -132,6 +132,23 @@
 | BR-55 | **كل عملية → حركة** | كل تحصيل/دفع/مصروف/تسوية/مكافأة → حركة تلقائية في treasury_movements |
 | BR-55b | **سقف عهدة السائق (D-44)** | `/api/orders/[id]/collect` و `/api/clients/[id]/collect`: إذا `driver.role === 'driver'` و `driver_custody.balance + newAmount > settings.driver_custody_cap_eur` → **يُرفَض** بـ `409 CUSTODY_CAP_EXCEEDED`. السائق ملزم بتسليم الأموال لمديره أولاً. Override يدوي (PM فقط) عبر header `X-Force-Collect: true` مع تسجيل في `activity_log`. |
 
+## قواعد الـ Avoir (D-38 + Phase 4.5)
+
+| # | القاعدة | التفصيل |
+|---|---------|---------|
+| BR-AV-1 | **pm/gm فقط** | إصدار Avoir عبر `POST /api/v1/invoices/[id]/avoir`؛ manager/seller/driver/stock_keeper → 403 |
+| BR-AV-2 | **D-35 readiness gate** | يُستدعى قبل الإصدار. settings ناقصة → 412 `D35_READINESS_INCOMPLETE` بلا أثر |
+| BR-AV-3 | **parent.status=مؤكد فقط** | إصدار avoir على فاتورة `ملغي` → 409 `INVOICE_NOT_ISSUABLE_AVOIR` |
+| BR-AV-4 | **Avoir-on-avoir ممنوع** | `parent.avoirOfId != null` → 409 `AVOIR_ON_AVOIR_NOT_ALLOWED`. مستوى واحد فقط من العكس |
+| BR-AV-5 | **line set متجانسة** | كل `invoiceLineId` في الـ body يجب أن ينتمي لـ parent، بلا تكرار → وإلّا 400 `INVALID_AVOIR_LINE_SET` |
+| BR-AV-6 | **running-total ≤ parent qty** | SUM(|quantity|) لكل line عبر كل avoirs السابقة + الجديد ≤ parent line quantity (tolerance 0.005). تحت FOR UPDATE على parent + existing children → 409 `AVOIR_QTY_EXCEEDS_REMAINING` عند التجاوز |
+| BR-AV-7 | **reason إلزامية** | string 1..2048. فارغة → 400 `VALIDATION_FAILED` |
+| BR-AV-8 | **money 2 decimals** | `quantityToCredit` يمرّ عبر `isTwoDecimalPrecise`. sub-cent → 400 `VALIDATION_FAILED` |
+| BR-AV-9 | **bookkeeping only** | إصدار avoir لا يكتب `treasury_movement`. cash refund (إن لزم) في ترانش لاحقة |
+| BR-AV-10 | **hash chain + D-58** | صف avoir + سطوره تشارك نفس invoices / invoice_lines chain. `invoices_no_update` trigger يمنع UPDATE على صف avoir بعد الإصدار. تصحيح = إصدار avoir إضافي، ليس UPDATE |
+| BR-AV-11 | **Idempotency-Key إلزامي** | D-79 — replay بنفس الـkey يُعيد الـresponse المُحفَّظ، لا يُنشئ صفاً ثانياً |
+| BR-AV-12 | **FAC-YYYY-MM-NNNN موحَّد** | Avoir يستخدم نفس monthly counter الخاص بالفاتورة (لا `AV-` منفصل) |
+
 ## قواعد المشتريات
 
 | # | القاعدة | التفصيل |

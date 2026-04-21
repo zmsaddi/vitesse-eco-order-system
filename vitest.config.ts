@@ -63,6 +63,7 @@ export default defineConfig({
         "src/modules/settlements/list.ts",        // Phase 4.4 — list + summary aggregates (DB-heavy, integration)
         "src/modules/settlements/credit.ts",      // Phase 4.4 — unapplied-debt lock + sum helpers (integration)
         "src/modules/settlements/source-account.ts", // Phase 4.4 — source-type + paymentMethod invariants (integration-exercised via payout/reward)
+        "src/modules/invoices/avoir/issue.ts",    // Phase 4.5 — avoir issuance tx + FOR UPDATE on parent + lines + children (integration)
         "src/modules/**/mappers.ts", // Trivial projections — covered via integration
         "src/modules/**/service.ts", // Business logic — covered by integration tests (require DB)
         "src/modules/users/nav.ts",  // Trivial re-export — covered via integration

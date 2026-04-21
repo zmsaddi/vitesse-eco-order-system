@@ -102,6 +102,23 @@ Helper: `tvaFromTtc(ttc, rate)` و `htFromTtc(ttc, rate)` في `src/lib/tva.ts`.
 
 **ملاحظة**: `supplier_credit` **محذوف** من treasury_movements (D-10). الرصيد الدائن للمورد يُدار في `suppliers.credit_due_from_supplier`، خارج treasury — لأنه receivable ليس cash.
 
+### Avoir (D-38 + Phase 4.5 — bookkeeping فقط)
+
+**Phase 4.5 — shipped 2026-04-21**: إصدار Avoir عبر `POST /api/v1/invoices/[id]/avoir` **لا يكتب treasury_movement**. الـ avoir هو سند محاسبي عكسي (negative invoice row + negative invoice_lines) يُسجَّل في سلسلة الفواتير مع hash chain (D-37) وimmutability trigger (D-58)، دون تدفق نقدي وقت الإصدار.
+
+**سبب هذا القرار**:
+- الفاتورة الأصلية قد تكون محصَّلة بالكامل، جزئياً، أو غير محصَّلة. إصدار avoir يُنشئ التزاماً محاسبياً عكسياً قد يُسَدَّد لاحقاً بأحد عدة مسارات:
+  - تحويل نقدي صريح عبر `POST /api/v1/treasury/transfer` (main_cash → ...)
+  - خصم من فاتورة قادمة لنفس العميل (credit offset)
+  - إبقاء الدَّين مفتوحاً في accounts receivable (خارج نطاق Phase 4)
+- ربط avoir تلقائياً بـ `treasury_movement` من نوع "refund" كان سيُلزِم المستخدم بتدفق نقدي عند كل إصدار — وهذا لا يطابق واقع السيناريوهات أعلاه.
+
+**Refund flow (إن لزم)**: بعد إصدار الـ avoir، pm/gm يُنشئ `treasury_movement` مستقلاً (category='refund' أو transfer مناسب) يشير إلى الـ avoir عبر `reference_type='invoice'` + `reference_id=<avoir_id>`. هذا المسار مؤجَّل لترانش لاحقة.
+
+**تأثير على P&L + client receivable**:
+- الـ avoir يُدرَج في totals الفواتير بمبالغ سالبة → مجموع revenue للفترة يُحسب `SUM(invoices.total_ttc_frozen WHERE NOT deleted)` ويُنقَص تلقائياً بالـ avoirs.
+- client balance (المشتق من `orders.total_amount - payments` حالياً) لا يتأثر مباشرة بالـ avoir لأن avoir لا يُعدِّل orders أو payments؛ تقرير الـ receivable المحاسبي يُنتَج بـ JOIN على invoices + avoirs لاحقاً.
+
 ---
 
 ## صيغة صافي الربح (P&L)

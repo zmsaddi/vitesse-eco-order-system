@@ -849,7 +849,7 @@ freqBoost = Math.min(0.15, Math.log10(frequency + 1) * 0.05);
 
 ### D-38 — Avoir Structure Formal
 
-**القرار**:
+**القرار (schema — في المخطط منذ 0000_initial_schema)**:
 ```sql
 ALTER TABLE invoices ADD COLUMN avoir_of_id INTEGER NULL REFERENCES invoices(id) ON DELETE RESTRICT;
 ALTER TABLE invoices ADD CONSTRAINT avoir_negative_total CHECK (
@@ -857,11 +857,24 @@ ALTER TABLE invoices ADD CONSTRAINT avoir_negative_total CHECK (
 );
 ```
 
-Avoir له أصنافه الخاصة في `invoice_lines` مع `quantity` سالبة. ترقيم نفس `FAC-YYYY-MM-NNNN` (تسلسل موحَّد)، لكن PDF يعرض "AVOIR" bold بدل "FACTURE" عند `avoir_of_id IS NOT NULL`.
+Avoir له أصنافه الخاصة في `invoice_lines` مع `quantity` سالبة. ترقيم نفس `FAC-YYYY-MM-NNNN` (تسلسل موحَّد)، لكن PDF يعرض "AVOIR" bold بدل "FACTURE" عند `avoir_of_id IS NOT NULL`، مع سطر مرجع `Avoir de la facture {parentRefCode} du {parentDate}`.
 
-**السبب**: CGI art. 272-1 — Avoir يجب أن يشير للفاتورة الأصلية + يحمل جميع mentions. Total سالب + quantity سالب per line = يسمح Avoir جزئي.
+**قواعد الإصدار الخمس (Phase 4.5 — shipped 2026-04-21)**:
+1. **pm/gm فقط** يُصدرون Avoir (`POST /api/v1/invoices/[id]/avoir`)؛ `Idempotency-Key` إلزامي.
+2. **D-35 readiness gate** يُستدعى قبل الإصدار — نفس إلزامية mentions obligatoires للفاتورة الأصلية.
+3. **Avoir-on-avoir ممنوع**: إذا `parent.avoirOfId IS NOT NULL` → 409 `AVOIR_ON_AVOIR_NOT_ALLOWED`. مستوى واحد فقط من العكس.
+4. **Avoir على فاتورة غير `مؤكد` ممنوع**: `parent.status !== 'مؤكد'` → 409 `INVOICE_NOT_ISSUABLE_AVOIR`.
+5. **Running-total enforcement under FOR UPDATE**: مجموع الكميات المُعادة لكل سطر عبر كل الـ avoirs السابقة + الجديد يجب ألا يتجاوز كمية السطر الأصلي (tolerance 0.005). الـ lock على parent invoice + child avoirs يُسلسل الـ concurrency.
 
-**التاريخ**: 2026-04-19.
+**Payload المرجع للـPDF**: DTO مستقل `avoirParent: { refCode, date } | null` على `InvoiceDetailDto`، مُعبَّأ من `LEFT JOIN invoices parent ON parent.id = invoice.avoir_of_id` في `getInvoiceById`. **لا يُحشر داخل `VendorSnapshot`** (الذي هو strict Zod schema للكتلة القانونية للبائع). الـ branch logic في PDF مُستخلَص إلى helper نقي `buildInvoiceHeaderLines` مع unit tests صريحة (`pdf-header.test.ts`).
+
+**Bookkeeping-only**: إصدار Avoir في Phase 4.5 لا يكتب `treasury_movement`. cash refund (إن لزم) يُنفَّذ في ترانش لاحقة عبر حركة treasury مستقلة.
+
+**Hash chain + D-58**: صف Avoir + سطوره تُدرَج في نفس الـ chain (D-37). `invoices_no_update` trigger يمنع UPDATE على الـ avoir تماماً كما على الفاتورة. إن احتيج تصحيح → إصدار avoir آخر، لا UPDATE.
+
+**السبب**: CGI art. 272-1 — Avoir يجب أن يشير للفاتورة الأصلية + يحمل جميع mentions. Total سالب + quantity سالب per line = يسمح Avoir جزئي. الـ running-total guard يضمن عدم تجاوز الأصل مجموعياً.
+
+**التاريخ**: 2026-04-19 (schema)، 2026-04-21 (issuance flow — Phase 4.5).
 
 ### D-39 — Registre des Traitements (GDPR Art. 30)
 

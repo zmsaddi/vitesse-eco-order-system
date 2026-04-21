@@ -136,6 +136,10 @@ export class CustodyCapExceededError extends BusinessRuleError {
 | `D35_READINESS_INCOMPLETE` | لا يمكن إصدار فاتورة: مذكرات D-35 الإلزامية ناقصة ({keys}). راجع الإعدادات | confirm-delivery pre-check: one or more of D35_REQUIRED_SETTINGS is missing/empty/placeholder | 412 |
 | `INVOICE_NO_ITEMS` | لا يمكن إصدار فاتورة لطلب بلا أصناف | issueInvoiceInTx: order_items empty (should be unreachable — defense-in-depth) | 409 |
 | `INVOICE_TOTAL_MISMATCH` | اختلال مجاميع الفاتورة | issueInvoiceInTx: sum(line.line_total) ≠ orders.total_amount (defense-in-depth) | 500 |
+| `INVOICE_NOT_ISSUABLE_AVOIR` | لا يمكن إصدار Avoir لفاتورة بحالة "{status}" | Phase 4.5 `performIssueAvoir`: `parent.status !== 'مؤكد'` (e.g. ملغي). Zero side effects. | 409 |
+| `AVOIR_ON_AVOIR_NOT_ALLOWED` | لا يمكن إصدار Avoir على Avoir آخر | Phase 4.5 `performIssueAvoir`: `parent.avoirOfId !== null`. Single-level reversal only. | 409 |
+| `INVALID_AVOIR_LINE_SET` | قائمة سطور الـ Avoir غير صحيحة (lineId غير منتمٍ للفاتورة أو مكرَّر) | Phase 4.5 `performIssueAvoir`: invoiceLineId from another invoice, duplicate id, or defence `computed totalTtc >= 0`. | 400 |
+| `AVOIR_QTY_EXCEEDS_REMAINING` | الكمية المطلوبة تتجاوز المتبقي القابل للاسترداد على الصنف ({lineNumber}): المتاح {remaining} | Phase 4.5 `performIssueAvoir` under FOR UPDATE: cumulative credited quantity across prior avoirs for this parent line + new request > parent line quantity (tolerance 0.005). | 409 |
 | `VIN_REQUIRED` | رقم VIN مطلوب لهذه الفئة ({category}) | vin_required_categories includes {cat}, vin field empty | 400 |
 | `DISCOUNT_OVER_LIMIT` | لا يمكنك منح خصم يتجاوز {limit}% ({req}% مطلوب) | role={role} discount={req}% > max={limit}% | 403 |
 | `PRICE_BELOW_COST` | السعر أقل من سعر الشراء — غير مقبول | sell_price={sp} < buy_price={bp} for product={id} | 400 |

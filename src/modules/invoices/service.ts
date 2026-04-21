@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import type { DbHandle } from "@/db/client";
 import {
   deliveries,
@@ -13,6 +14,7 @@ import {
   type InvoiceClaims,
 } from "./permissions";
 import type {
+  AvoirParent,
   InvoiceDetailDto,
   InvoiceDto,
   InvoiceLineDto,
@@ -67,13 +69,23 @@ export async function getInvoiceById(
   id: number,
   claims: InvoiceClaims,
 ): Promise<InvoiceDetailDto> {
+  // Phase 4.5 — self-join on parent invoice to carry `avoirParent` in the
+  // detail DTO. LEFT JOIN so regular (non-avoir) invoices return null. The
+  // parent reference is NOT stuffed into vendorSnapshot (strict Zod schema);
+  // it lives as an independent field consumed by the PDF header helper.
+  const parentInv = alias(invoices, "parent_invoice");
   const headerRows = await db
-    .select()
+    .select({
+      invoice: invoices,
+      parentRefCode: parentInv.refCode,
+      parentDate: parentInv.date,
+    })
     .from(invoices)
+    .leftJoin(parentInv, eq(parentInv.id, invoices.avoirOfId))
     .where(and(eq(invoices.id, id), isNull(invoices.deletedAt)))
     .limit(1);
   if (headerRows.length === 0) throw new NotFoundError(`الفاتورة رقم ${id}`);
-  const header = headerRows[0];
+  const { invoice: header, parentRefCode, parentDate } = headerRows[0];
 
   const ctx = await readVisibilityContext(db, header.orderId, header.deliveryId);
   enforceInvoiceVisibility(ctx, claims);
@@ -84,9 +96,15 @@ export async function getInvoiceById(
     .where(eq(invoiceLines.invoiceId, id))
     .orderBy(asc(invoiceLines.lineNumber));
 
+  const avoirParent: AvoirParent | null =
+    header.avoirOfId != null && parentRefCode != null && parentDate != null
+      ? { refCode: parentRefCode, date: parentDate }
+      : null;
+
   return {
     invoice: invoiceRowToDto(header),
     lines: lineRows.map(invoiceLineRowToDto),
+    avoirParent,
   };
 }
 

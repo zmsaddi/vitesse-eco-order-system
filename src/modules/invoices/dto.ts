@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isTwoDecimalPrecise } from "@/lib/money";
 
 // Phase 4.1 — invoice DTOs.
 //
@@ -84,12 +85,62 @@ export const InvoiceDto = z.object({
 });
 export type InvoiceDto = z.infer<typeof InvoiceDto>;
 
-// Full projection returned by GET /api/v1/invoices/[id]: header + lines.
+// Phase 4.5 — Avoir parent reference.
+//
+// An avoir (credit note) always points to a parent invoice via
+// `invoices.avoir_of_id`. The PDF renders "AVOIR" with a reference line
+// "Avoir de la facture <parentRefCode> du <parentDate>". That reference is
+// transported as an independent DTO field (NOT folded into `VendorSnapshot`,
+// which is a strict Zod schema for the frozen vendor block and would strip
+// or reject a non-vendor field). Populated in `getInvoiceById` via a
+// self-join on `invoices.avoir_of_id`. `null` for regular (non-avoir)
+// invoices.
+export const AvoirParent = z.object({
+  refCode: z.string(),
+  date: z.string(),
+});
+export type AvoirParent = z.infer<typeof AvoirParent>;
+
+// Full projection returned by GET /api/v1/invoices/[id]: header + lines + avoirParent.
 export const InvoiceDetailDto = z.object({
   invoice: InvoiceDto,
   lines: z.array(InvoiceLineDto),
+  avoirParent: AvoirParent.nullable(),
 });
 export type InvoiceDetailDto = z.infer<typeof InvoiceDetailDto>;
+
+// Phase 4.5 — POST /api/v1/invoices/[id]/avoir body.
+//
+// Full avoir: caller passes every parent line at its full quantity.
+// Partial avoir: caller passes a subset of lines with reduced quantities.
+// Multiple partial avoirs allowed in sequence; the service locks the parent
+// + existing children and rejects when cumulative refund would exceed the
+// original quantity on any line (AVOIR_QTY_EXCEEDS_REMAINING).
+export const IssueAvoirLineInput = z.object({
+  invoiceLineId: z.number().int().positive(),
+  quantityToCredit: z
+    .number()
+    .positive()
+    .max(1_000_000)
+    .refine(isTwoDecimalPrecise, {
+      message: "الكمية يجب أن تكون بدقة سنتين (2 decimals max).",
+    }),
+});
+export type IssueAvoirLineInput = z.infer<typeof IssueAvoirLineInput>;
+
+export const IssueAvoirInput = z.object({
+  reason: z.string().min(1, "السبب إلزامي").max(2048),
+  lines: z.array(IssueAvoirLineInput).min(1, "يجب تحديد سطر واحد على الأقل"),
+});
+export type IssueAvoirInput = z.infer<typeof IssueAvoirInput>;
+
+export const IssueAvoirResult = z.object({
+  avoir: InvoiceDto,
+  lines: z.array(InvoiceLineDto),
+  parentInvoiceId: z.number().int().positive(),
+  parentRefCode: z.string(),
+});
+export type IssueAvoirResult = z.infer<typeof IssueAvoirResult>;
 
 // List query — pagination + date-range filter + status filter.
 export const ListInvoicesQuery = z.object({

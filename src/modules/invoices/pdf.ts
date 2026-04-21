@@ -5,6 +5,7 @@ import type {
   PaymentsHistory,
   VendorSnapshot,
 } from "./dto";
+import { buildInvoiceHeaderLines } from "./pdf-header";
 
 // Phase 4.1.1 — minimal French invoice PDF renderer, frozen-only inputs.
 //
@@ -210,12 +211,20 @@ export function renderInvoicePdf(detail: InvoiceDetailDto): Promise<Buffer> {
     const inv = detail.invoice;
     const v = inv.vendorSnapshot;
 
-    doc.font("Helvetica-Bold").fontSize(20).text("FACTURE", 50, 50);
+    // Phase 4.5 — header varies between "FACTURE" and "AVOIR" + optional
+    // parent reference line. The branch is computed by a pure helper
+    // (buildInvoiceHeaderLines) with its own unit tests — see pdf-header.test.ts.
+    const header = buildInvoiceHeaderLines(inv, detail.avoirParent);
+    doc.font("Helvetica-Bold").fontSize(20).text(header.title, 50, 50);
     doc.font("Helvetica").fontSize(11);
-    doc.text(`N° ${inv.refCode}`, 50, 78);
-    doc.text(`Date de facturation : ${inv.date}`, 50, 92);
-    doc.text(`Date de livraison : ${inv.deliveryDate ?? "—"}`, 50, 106);
-    doc.text(`Mode de règlement : ${inv.paymentMethod}`, 50, 120);
+    if (header.referenceLine) {
+      doc.fontSize(9).text(header.referenceLine, 50, 74);
+      doc.fontSize(11);
+    }
+    doc.text(`N° ${inv.refCode}`, 50, 90);
+    doc.text(`Date de facturation : ${inv.date}`, 50, 104);
+    doc.text(`Date de livraison : ${inv.deliveryDate ?? "—"}`, 50, 118);
+    doc.text(`Mode de règlement : ${inv.paymentMethod}`, 50, 132);
 
     // Vendor (right side, frozen).
     drawVendorBlock(doc, v, 320, 50);

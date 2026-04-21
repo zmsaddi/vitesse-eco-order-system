@@ -77,6 +77,21 @@
 - **لا يُحذف صف** — soft cancel فقط (BR-65).
 - **لا يُعدَّل total** — immutability triggers (D-58) + hash chain (D-37) يضمنان ذلك. التصحيح يتم عبر Avoir (D-38).
 
+### Avoir PDF (D-38 + Phase 4.5)
+
+عندما `invoice.avoirOfId != null` يتبدَّل الـ PDF header:
+
+- **العنوان**: `AVOIR` bold بدل `FACTURE`.
+- **سطر مرجع تحت العنوان** (fontSize 9): `Avoir de la facture {parentRefCode} du {parentDate}` — مثال: `Avoir de la facture FAC-2026-04-0023 du 2026-04-15`.
+- **ref-code** على نفس نمط الفاتورة: `FAC-YYYY-MM-NNNN` (تسلسل موحَّد — D-38).
+- **المبالغ** تُعرض بالسالب كما هي مُجمَّدة على الصف: `total_ttc_frozen < 0` (CHECK على DB).
+- **quantity على كل سطر** سالب: `-1`، `-0.50`، إلخ.
+- **باقي الصفحة** مطابق للفاتورة العادية: vendor block (D-35 mentions كاملة من `vendorSnapshot`)، client block، items table، totals، payment history (فارغة على الـ avoir)، legal footer (شروط الدفع + IBAN/BIC).
+
+**تنفيذ تقني**: الفرع (title + referenceLine) مُستخلَص إلى helper نقي `buildInvoiceHeaderLines(invoice, avoirParent)` في `src/modules/invoices/pdf-header.ts` مع unit tests صريحة تُثبت `AVOIR` + `parentRefCode` + `parentDate` — منفصل عن pdfkit render لتجنّب الاعتماد على استخراج نص PDF في الاختبارات.
+
+**`avoirParent` payload**: `{ refCode: string, date: string } | null` على `InvoiceDetailDto` — **ليس داخل** `VendorSnapshot` (الذي هو Zod schema للكتلة القانونية للبائع). `getInvoiceById` يعبِّئه عبر `LEFT JOIN invoices parent ON parent.id = invoice.avoir_of_id`.
+
 ### Cairo font (D-56)
 
 - TTFs في `public/fonts/cairo/` (400 + 700 weights).
