@@ -2,6 +2,22 @@
 
 > **Template**: D-78 §5 (13-section) + Implementation Contract + Self-Review Findings.
 > **Type**: Step 1 of the 4-step Phase 4 closure plan. Narrow functional tranche — transfer (4-route allowlist) + reconcile (movement-derived expected, BR-54). Settlements, avoir, distributions remain out.
+> **Status**: Superseded by **Phase 4.3.1** (money precision + owner-error code drift). See [`phase-4.3.1-delivery-report.md`](./phase-4.3.1-delivery-report.md).
+
+---
+
+## 0. Errata (added 2026-04-21 after external review)
+
+Two defects surfaced against `ef5c57f`:
+
+1. **CRITICAL — Money precision**: `TransferInput.amount` and `ReconcileInput.actualBalance` accepted sub-cent values. A transfer of `0.004` passed Zod, then `round2(0.004) = 0.00` silently produced a **zero-value treasury_movements row** — which 12_Accounting_Rules forbids as "حركة صفرية".
+2. **HIGH — Drift on reconcile owner error**: the cross-team reconcile path threw a generic `PermissionError` (code=`FORBIDDEN`), while the original Phase 4.3 contract had proposed a dedicated `RECONCILE_NOT_OWNER`, the 4.3 report § self-review §12 labelled it "non-blocking gap", and `31_Error_Handling.md` had no entry. Three states in drift.
+
+**Resolved in Phase 4.3.1**:
+- Strict 2-decimal precision enforced at Zod (`isTwoDecimalPrecise` refine on both inputs) + a service-level defense `round2(amount) < 0.01` on transfer that rejects with `VALIDATION_FAILED` 400 so no zero-value movement can be inserted even by a direct service caller.
+- `RECONCILE_NOT_OWNER` now a dedicated 403 code emitted by `performReconcile`. Documented in `31_Error_Handling.md`. Contract/code/docs aligned.
+
+Read this report together with the 4.3.1 report.
 
 ---
 

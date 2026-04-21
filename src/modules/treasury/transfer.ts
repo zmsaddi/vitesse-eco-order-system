@@ -61,13 +61,20 @@ export async function performTransfer(
 ): Promise<TransferResult> {
   assertCanTransfer(claims);
 
-  // Defense-in-depth guard: Zod already enforces `amount > 0`, but re-check
-  // here in case a caller constructs the service call directly.
-  if (input.amount <= 0) {
+  // Defense-in-depth guard (Phase 4.3.1): Zod rejects sub-cent inputs at
+  // the wire, but a direct service-level caller could still pass 0.001 or
+  // similar. `round2(0.004) === 0.00` and would otherwise slip through
+  // the `amount > 0` check — resulting in a zero-value movement row, which
+  // 12_Accounting_Rules forbids. Assert on the POST-rounded value so this
+  // cannot happen regardless of caller.
+  const roundedAmount = round2(input.amount);
+  if (roundedAmount < 0.01) {
     throw new BusinessRuleError(
-      "مبلغ التحويل يجب أن يكون موجباً.",
+      "مبلغ التحويل يجب أن يكون 0.01€ على الأقل (لا تحويل بقيمة صفرية).",
       "VALIDATION_FAILED",
       400,
+      "transfer: rounded amount below 0.01 — would produce zero-value movement",
+      { rawAmount: input.amount, roundedAmount },
     );
   }
 
@@ -115,7 +122,7 @@ export async function performTransfer(
     );
   }
 
-  const amount = round2(input.amount);
+  const amount = roundedAmount;
   const fromBalance = parseNumeric(fromAcct.balance);
   if (amount > fromBalance + 0.005) {
     throw new ConflictError(

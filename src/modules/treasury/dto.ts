@@ -58,10 +58,28 @@ export type HandoverInput = z.infer<typeof HandoverInput>;
 // the caller does NOT specify it. `amount > 0` is guarded at the schema
 // layer + re-asserted at the service layer (defense-in-depth for any caller
 // that bypasses Zod).
+//
+// Phase 4.3.1 — strict 2-decimal precision: a sub-cent amount (0.004, 0.005)
+// is REJECTED at the schema layer. Rationale: after `round2(0.004) = 0.00`
+// the service layer would otherwise silently insert a zero-value movement
+// row. The refine below makes that scenario unreachable from the wire.
+function isTwoDecimalPrecise(v: number): boolean {
+  // Accept values whose (v * 100) is integer within a float-safe epsilon.
+  // This rejects 0.001 / 0.004 / 0.005 / 10.004 etc., and accepts 0.00,
+  // 0.01, 10.00, 10.50, 99.99, … regardless of how JS serialises them.
+  return Math.abs(v * 100 - Math.round(v * 100)) < 1e-9;
+}
+
 export const TransferInput = z.object({
   fromAccountId: z.number().int().positive(),
   toAccountId: z.number().int().positive(),
-  amount: z.number().positive().max(10_000_000),
+  amount: z
+    .number()
+    .positive()
+    .max(10_000_000)
+    .refine(isTwoDecimalPrecise, {
+      message: "المبلغ يجب أن يكون بدقة سنتين (2 decimals max).",
+    }),
   notes: z.string().max(2048).default(""),
 });
 export type TransferInput = z.infer<typeof TransferInput>;
@@ -72,9 +90,17 @@ export type TransferInput = z.infer<typeof TransferInput>;
 // treasury_movements (source of truth per 12_Accounting_Rules §reconcile),
 // NOT against the cached treasury_accounts.balance. Zero is an allowed
 // physical count → schema permits `.min(0)`.
+//
+// Phase 4.3.1 — strict 2-decimal precision applies here too.
 export const ReconcileInput = z.object({
   accountId: z.number().int().positive(),
-  actualBalance: z.number().min(0).max(100_000_000),
+  actualBalance: z
+    .number()
+    .min(0)
+    .max(100_000_000)
+    .refine(isTwoDecimalPrecise, {
+      message: "الرصيد يجب أن يكون بدقة سنتين (2 decimals max).",
+    }),
   notes: z.string().max(2048).default(""),
 });
 export type ReconcileInput = z.infer<typeof ReconcileInput>;

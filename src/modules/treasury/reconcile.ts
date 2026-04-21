@@ -1,11 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import type { DbTx } from "@/db/client";
 import { treasuryAccounts, treasuryMovements } from "@/db/schema";
-import {
-  BusinessRuleError,
-  ConflictError,
-  PermissionError,
-} from "@/lib/api-errors";
+import { BusinessRuleError, ConflictError } from "@/lib/api-errors";
 import { logActivity } from "@/lib/activity-log";
 import type { ReconcileInput } from "./dto";
 import {
@@ -108,16 +104,25 @@ export async function performReconcile(
 
   // Fine-grained role gate: manager may reconcile ONLY their own
   // manager_box. pm/gm can reconcile any account type.
+  //
+  // Phase 4.3.1 — this path now emits a dedicated code so the wire
+  // contract is distinguishable from other 403s. Closes the drift between
+  // contract / report / code that existed after the initial Phase 4.3
+  // ship.
   if (claims.role === "manager") {
     if (account.type !== "manager_box" || account.owner_user_id !== claims.userId) {
-      throw new PermissionError(
+      throw new BusinessRuleError(
         "لا يمكنك مصالحة صندوق ليس لك.",
+        "RECONCILE_NOT_OWNER",
+        403,
+        "performReconcile: manager attempted to reconcile an account they do not own",
+        {
+          accountId: account.id,
+          accountType: account.type,
+          accountOwnerUserId: account.owner_user_id,
+          callerUserId: claims.userId,
+        },
       );
-      // Note: the generic PermissionError uses code='FORBIDDEN' (403). The
-      // project-wide convention is to log this as a permission boundary
-      // rather than a business rule. Explicit RECONCILE_NOT_OWNER is
-      // surfaced via the response body's message so the frontend can map
-      // it back if needed.
     }
   }
 
