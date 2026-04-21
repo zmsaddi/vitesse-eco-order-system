@@ -108,13 +108,13 @@
 | `/api/v1/invoices/[id]/pdf` | GET | الكل | PDF فاتورة (فرنسي، FAC-YYYY-MM-NNNN — D-01) |
 | `/api/v1/invoices/[id]/avoir` | POST | pm,gm | إصدار Avoir (credit note) — فاتورة عكسية بمبلغ سالب، لا يُحذف الأصل (H7 محاسبياً صحيح) |
 | `/api/v1/treasury` | GET | pm,gm,manager(صندوقي + عهدات فريقي),driver(عهدتي) | Phase 4.2 — أرصدة + حركات. Response: `{ accounts, movements, movementsTotal }`. Manager filter يستخدم `users.manager_id` لتحديد فريق المدير (لا cross-team). seller/stock_keeper → 403. |
-| `/api/v1/treasury/transfer` | POST | pm,gm | تحويل بين صناديق — **خارج Phase 4.2** (tranche لاحقة) |
-| `/api/v1/treasury/reconcile` | POST | pm,gm,manager | تسوية يومية — **خارج Phase 4.2** (tranche لاحقة) |
-| `/api/v1/treasury/handover` | POST | driver(تسليم), manager(استلام لسائق تابع له) | Phase 4.2 — driver_custody → manager_box حصراً، `category='driver_handover'`. Body: `{ amount, driverUserId?, notes? }`. Driver caller: `driverUserId` يُتجاهَل ويُفرض = own userId. Manager caller: `driverUserId` إلزامي و`drv.manager_id === manager.userId` (server-enforced). `Idempotency-Key` **إلزامي** (D-79). |
-| `/api/v1/settlements` | GET | pm,gm,manager | قائمة التسويات (pagination) |
-| `/api/v1/settlements` | POST | pm,gm | التسويات والمكافآت (`Idempotency-Key` إلزامي) |
-| `/api/v1/distributions` | GET | pm,gm,manager(👁) | توزيعات الأرباح |
-| `/api/v1/distributions` | POST | pm,gm | إنشاء توزيع (`Idempotency-Key` إلزامي) |
+| `/api/v1/treasury/transfer` | POST | pm,gm | **Phase 4.3 (داخل Phase 4 closure)** — أربع مسارات فقط مسموح بها: `main_cash → manager_box` (funding) و`manager_box → main_cash` (manager_settlement) و`main_cash → main_bank` (bank_deposit) و`main_bank → main_cash` (bank_withdrawal). `Idempotency-Key` إلزامي. |
+| `/api/v1/treasury/reconcile` | POST | pm,gm (أي حساب), manager (صندوقه فقط) | **Phase 4.3 (داخل Phase 4 closure)** — تسوية يومية؛ لا تُستخدم كـ transfer مقنّع. `Idempotency-Key` إلزامي. |
+| `/api/v1/treasury/handover` | POST | driver(تسليم), manager(استلام لسائق تابع له) | **Phase 4.2 — shipped** — driver_custody → manager_box حصراً، `category='driver_handover'`. Body: `{ amount, driverUserId?, notes? }`. Driver caller: `driverUserId` يُتجاهَل ويُفرض = own userId. Manager caller: `driverUserId` إلزامي و`drv.manager_id === manager.userId` (server-enforced). `Idempotency-Key` **إلزامي** (D-79). |
+| `/api/v1/settlements` | GET | pm,gm,manager | **Phase 4.4 (داخل Phase 4 closure)** — قائمة التسويات (pagination). |
+| `/api/v1/settlements` | POST | pm,gm | **Phase 4.4 (داخل Phase 4 closure)** — التسويات والمكافآت + negative settlement (من `cancel_as_debt` على bonus مسوَّاة)؛ `Idempotency-Key` إلزامي. |
+| `/api/v1/distributions` | GET | pm,gm,manager(👁) | **Phase 6 (مؤجَّل بعد إغلاق Phase 4 — NOT a closure blocker)** — توزيعات الأرباح. expert-comptable يتولاها حالياً خارج النظام. |
+| `/api/v1/distributions` | POST | pm,gm | **Phase 6 (مؤجَّل بعد إغلاق Phase 4 — NOT a closure blocker)** — إنشاء توزيع؛ `Idempotency-Key` إلزامي. |
 | `/api/v1/bonuses` | GET | الكل (مفلتر) | العمولات |
 
 ## النظام

@@ -1,10 +1,10 @@
 # خطة التطوير — Development Plan
 
-> **آخر تحديث**: 2026-04-20
-> **الحالة**: Phase 0..3 **مغلقة** (Phase 3 closing baseline = `0151b0f`). **82 قراراً** (D-01..D-82). Phase 4 (deliveries + invoices + treasury + bonuses settlement) معلَّقة لتأكيد "ابدأ". **D-77 + D-78 = Delivery Acceptance Framework**: 13-gate CI، 13-section report، T+1h/T+24h monitoring، KPIs (zero tolerance). الإقفال ليس إذناً بنشر إنتاجي — Phase 4 شرط ضروري لـ pilot تشغيلي كامل.
+> **آخر تحديث**: 2026-04-21
+> **الحالة**: Phase 0..3 **مغلقة** (Phase 3 closing baseline = `0151b0f`). Phase 4 قيد الإغلاق عبر 4 خطوات متسلسلة على baseline `4ba4c65` (انظر §"Phase 4 Closure Criteria" أدناه). **82 قراراً** (D-01..D-82). **D-77 + D-78 = Delivery Acceptance Framework**: 13-gate CI، 13-section report، T+1h/T+24h monitoring، KPIs (zero tolerance). الإقفال ليس إذناً بنشر إنتاجي — Phase 4 شرط ضروري لـ pilot تشغيلي كامل.
 > **النوع**: مشروع جديد بالكامل (fresh build)
 > **المواصفات**: [requirements-analysis/](requirements-analysis/)
-> **القرارات الحاكمة**: [requirements-analysis/00_DECISIONS.md](requirements-analysis/00_DECISIONS.md) — **78 قراراً** فاصلاً (D-01..D-78)
+> **القرارات الحاكمة**: [requirements-analysis/00_DECISIONS.md](requirements-analysis/00_DECISIONS.md) — **82 قراراً** فاصلاً (D-01..D-82)
 > **خطة التنفيذ**: [implementation/00_execution_plan.md](implementation/00_execution_plan.md)
 
 ---
@@ -80,16 +80,17 @@ v2 هو نظام إدارة عمليات كامل لشركة **Vitesse Eco SAS**
 9. Role home = Action Hub لـ PM/GM/manager (D-72)، task-first للـ operational (غير مغيَّر).
 10. Basic notifications (in-app، on-demand — D-42).
 
-**مؤجَّل إلى post-MVP (Phases 4..6)**:
+**مؤجَّل إلى post-MVP (Phases 5..6)**:
 - Voice input → Phase 5 مع re-evaluation أولاً (الاستمرار غير مضمون).
-- Dashboards الثقيلة (charts + widgets) → Phase 4.
+- **Dashboards الثقيلة (charts + widgets) → Phase 5** (reviewer decision 2026-04-21 — ليست blocker لإغلاق Phase 4).
 - Permissions UI interactive → Phase 6.
-- Profit Distributions → Phase 6 (expert-comptable يتولاها حالياً).
-- Activity log explorer UI → Phase 4 (DB موجود، UI مؤجَّل).
+- **Profit Distributions (`/api/v1/distributions` + UI) → Phase 6** (reviewer decision 2026-04-21 — expert-comptable يتولاها حالياً؛ ليست blocker لإغلاق Phase 4).
+- **Activity log explorer UI → Phase 5** (reviewer decision 2026-04-21 — الـDB موجود من Phase 3؛ الـUI ليس blocker لإغلاق Phase 4).
 - Command Palette (Ctrl+K) → Phase 6 polish.
 - Onboarding modal المطوَّل (D-49) → يُخفَّف إلى tooltip واحد لكل دور في MVP.
 - Cancel advanced mode للـ seller → admin فقط في MVP.
-- Reports dashboard + charts → Phase 4.
+- **Reports dashboard + charts → Phase 5** (reviewer decision 2026-04-21 — ليست blocker لإغلاق Phase 4).
+- **Notifications expansion (email/SMS channels)** → Phase 5.
 
 **السبب**: تقييم المطوِّر الخارجي (تقرير #07 — 64/100) كشف أن النطاق السابق (7 مراحل كاملة) واسع جداً. MVP ضيق = إطلاق أسرع + تعلُّم حقيقي قبل التوسع.
 
@@ -357,7 +358,35 @@ No production deployment without T+1h and T+24h monitoring reports.
 
 ### Phase 4 — التوصيل + الصناديق + الفواتير + العمولات + التسويات — **XXL (12-16 يوم)**
 
-> **Scope (reviewer decision 2026-04-20)**: preparation board نُقل إلى Phase 3. Phase 4 يبدأ من `جاهز` ويغطي التسليم + الفواتير + الصناديق + حساب العمولات الفعلي + التسويات + الأرباح.
+#### Phase 4 Closure Criteria (canonical — baseline `4ba4c65`, reviewer decision 2026-04-21)
+
+**إغلاق Phase 4 مشروط حصرياً بهذه الأربع** — أي بند خارج القائمة ليس blocker لإغلاقها:
+
+1. ✅ **Deliveries + confirm + collection** (Phase 4.0 + 4.0.1 + 4.0.2 — committed).
+2. ✅ **Invoice core + PDF + avoir** (Phase 4.1 + 4.1.1 + 4.1.2 committed؛ **avoir core** في Phase 4.5).
+3. ⏳ **Treasury core + handover + transfer + reconcile** (Phase 4.2 + 4.2.1 committed؛ **transfer + reconcile** في Phase 4.3).
+4. ⏳ **Settlements + `/my-bonus` + `cancel_as_debt`** (Phase 4.4 — يغلق BR-18 / BR-19).
+
+**مؤجَّل صراحة إلى ما بعد Phase 4 — NOT a closure blocker**:
+- **`/api/v1/distributions`** (Profit Distributions) → **Phase 6**. المبرِّر: expert-comptable يتولاها خارج النظام.
+- **Dashboards الثقيلة** (6 dashboards per-role + charts + widgets) → **Phase 5**.
+- **Reports dashboards** (P&L 3 views + seller performance + profit per order + top clients/suppliers) → **Phase 5**.
+- **Activity log explorer UI** (`/activity`) → **Phase 5** (الـDB + hash chain موجودان منذ Phase 3).
+- **Notifications expansion** (email/SMS channels، إشعارات advanced) → **Phase 5**.
+- **Voice system** (Groq STT + NLP) → **Phase 5** مع re-evaluation.
+- أي ميزة من Phase 5 / 6 بشكل عام.
+
+**خطوات إغلاق Phase 4 بعد baseline `4ba4c65`** (tranche واحدة في كل خطوة، Contract → تنفيذ → Self-Review → D-78 → gates → local commit → توقف):
+- **Step 1** → Phase 4.3 (Treasury transfer + reconcile، أربع categories فقط: funding / manager_settlement / bank_deposit / bank_withdrawal).
+- **Step 2** → Phase 4.4 (Settlements + `/my-bonus` read-only + cancel_as_debt → negative settlement).
+- **Step 3** → Phase 4.5 (Avoir core: POST /api/v1/invoices/[id]/avoir + avoir PDF).
+- **Step 4** → Phase 4 Closure Pack (docs-only ما لم يكشف المراجع gap جديد).
+
+#### Scope النصي الأصلي (reviewer decision 2026-04-20)
+
+> preparation board نُقل إلى Phase 3. Phase 4 يبدأ من `جاهز` ويغطي التسليم + الفواتير + الصناديق + حساب العمولات الفعلي + التسويات + الأرباح.
+
+**ملاحظة**: قائمة المهام التفصيلية التالية (1..13) تبقى كما هي للرجوع التاريخي، لكن بنود **8 (`/distributions`)، 10 (6 dashboards)، 11 (Reports)، والأطراف المذكورة تحت "Activity log UI"** تنتمي الآن رسمياً إلى **Phase 5 / 6** وليست blocker لإغلاق Phase 4.
 
 **الهدف**: end-to-end flow من طلب جاهز إلى تسوية يومية متوازنة.
 
