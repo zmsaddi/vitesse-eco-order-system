@@ -27,10 +27,10 @@
 | 6 | التوصيلات | `/deliveries` | CRUD | 4 |
 | 7 | مهام السائق | `/driver-tasks` | Tasks | 4 |
 | 8 | تحضير الطلبات (Stock Keeper) | `/preparation` | Tasks | 4 |
-| 9 | الفواتير | `/invoices` | CRUD | 5 |
-| 10 | الصندوق | `/treasury` | CRUD+Detail | 5 |
-| 11 | التسويات | `/settlements` | CRUD | 5 |
-| 12 | توزيع الأرباح | `/distributions` | CRUD | 5 |
+| 9 | الفواتير | `/invoices` | CRUD | 4 |
+| 10 | الصندوق | `/treasury` | CRUD+Detail | 4 |
+| 11 | التسويات | `/settlements` | CRUD | 4.4 |
+| 12 | توزيع الأرباح | `/distributions` | CRUD | 6 |
 | 13 | المخزون | `/stock` | CRUD | 2 |
 | 14 | صفحة منتج | `/stock/[id]` | Detail | 2 |
 | 15 | كتالوج PDF | `/catalog` | خاص | 2 |
@@ -39,20 +39,26 @@
 | 18 | الموردين | `/suppliers` | CRUD | 2 |
 | 19 | تفاصيل مورد | `/suppliers/[id]` | Detail | 2 |
 | 20 | الجرد | `/inventory` | CRUD | 2 |
-| 21 | عمولتي | `/my-bonus` | Detail | 5 |
+| 21 | عمولتي | `/my-bonus` | Detail | 4.4 |
 | 22 | المستخدمين | `/users` | CRUD | 2 |
 | 23 | الإعدادات | `/settings` | خاص | 2 |
 | 24 | الصلاحيات | `/permissions` | خاص | 6 |
-| 25 | سجل النشاطات | `/activity` | CRUD | 6 |
+| 25 | سجل النشاطات | `/activity` | CRUD | 5 |
 
 تفاصيل الأدوار لكل صفحة في ملف `15_Roles_Permissions.md`.
 
 ### Onboarding Modal (D-49 — جديد)
 
-ليس صفحة مستقلة — هو modal overlay يظهر على `/dashboard` عند أول تسجيل دخول:
+ليس صفحة مستقلة — هو modal overlay يظهر على الصفحة الأولى (role-home) عند أول تسجيل دخول:
+- pm/gm/manager → `/action-hub` (D-72: الـ admin home ليس `/dashboard`).
+- seller → `/orders` (role-home).
+- driver → `/driver-tasks`.
+- stock_keeper → `/preparation`.
+
+الـ modal مستقل عن الـ route ويُركَّب في layout الـ `(app)` على أساس `user.onboarded_at === null`:
 
 ```ts
-// في src/app/dashboard/page.tsx
+// في src/app/(app)/layout.tsx (conceptual — تفاصيل التنفيذ في Phase 5 polish)
 if (user.onboarded_at === null) {
   return <WelcomeModal role={user.role} onComplete={markOnboarded} />;
 }
@@ -68,7 +74,7 @@ if (user.onboarded_at === null) {
 
 **Tooltips سياقية**: dismissible، تُحفَظ في `localStorage[user_id + 'dismissed_tooltips']`.
 
-**زر "إكمال الـ onboarding"** → `PUT /api/users/me/onboard` → `UPDATE users SET onboarded_at=NOW()` → إخفاء الـ modal + checklist collapsible في `/dashboard`.
+**زر "إكمال الـ onboarding"** → `PUT /api/users/me/onboard` → `UPDATE users SET onboarded_at=NOW()` → إخفاء الـ modal + checklist collapsible داخل role-home.
 
 ---
 

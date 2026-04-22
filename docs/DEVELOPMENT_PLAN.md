@@ -1,7 +1,7 @@
 # خطة التطوير — Development Plan
 
-> **آخر تحديث**: 2026-04-21
-> **الحالة**: Phase 0..3 **مغلقة** (Phase 3 closing baseline = `0151b0f`). Phase 4 قيد الإغلاق عبر 4 خطوات متسلسلة على baseline `4ba4c65` (انظر §"Phase 4 Closure Criteria" أدناه). **82 قراراً** (D-01..D-82). **D-77 + D-78 = Delivery Acceptance Framework**: 13-gate CI، 13-section report، T+1h/T+24h monitoring، KPIs (zero tolerance). الإقفال ليس إذناً بنشر إنتاجي — Phase 4 شرط ضروري لـ pilot تشغيلي كامل.
+> **آخر تحديث**: 2026-04-22
+> **الحالة**: Phase 0..3 **مغلقة** (Phase 3 closing baseline = `0151b0f`). **Phase 4 مغلقة محليًا** على baseline `fba93e4` (Phase 4.0/4.0.1/4.0.2 + 4.1/4.1.1/4.1.2 + 4.2/4.2.1 + 4.3/4.3.1/4.3.2 + 4.4/4.4.1 + 4.5 كلها committed؛ الـ Closure Pack docs-only في هذه الـ commit). **82 قراراً** (D-01..D-82). **D-77 + D-78 = Delivery Acceptance Framework**: 13-gate CI، 13-section report، T+1h/T+24h monitoring، KPIs (zero tolerance). الإقفال ليس إذناً بنشر إنتاجي — Phase 4 شرط ضروري لـ pilot تشغيلي كامل.
 > **النوع**: مشروع جديد بالكامل (fresh build)
 > **المواصفات**: [requirements-analysis/](requirements-analysis/)
 > **القرارات الحاكمة**: [requirements-analysis/00_DECISIONS.md](requirements-analysis/00_DECISIONS.md) — **82 قراراً** فاصلاً (D-01..D-82)
@@ -248,7 +248,7 @@ No production deployment without T+1h and T+24h monitoring reports.
    - Topbar: breadcrumbs + bell placeholder + user menu
    - RTL-first classes (`dir="rtl"` على `<html>`)
 6. Sidebar data-driven من `permissions` (لا hardcoding).
-7. Command Palette (Ctrl+K) — بحث في routes المسموحة للمستخدم.
+7. ~~Command Palette (Ctrl+K)~~ → **نُقل إلى Phase 6** (D-71 / reviewer decision 2026-04-21). لا يُنفَّذ في Phase 1.
 8. API: `/api/auth/*`, `/api/health`, `/api/init` (POST مع confirm phrase `"احذف كل البيانات نهائيا"` في بيئة dev فقط).
 9. صفحات shell فارغة لكل route (placeholder).
 
@@ -360,14 +360,14 @@ No production deployment without T+1h and T+24h monitoring reports.
 
 ### Phase 4 — التوصيل + الصناديق + الفواتير + العمولات + التسويات — **XXL (12-16 يوم)**
 
-#### Phase 4 Closure Criteria (canonical — baseline `4ba4c65`, reviewer decision 2026-04-21)
+#### Phase 4 Closure Criteria (canonical — baseline `fba93e4`, reviewer decision 2026-04-21)
 
-**إغلاق Phase 4 مشروط حصرياً بهذه الأربع** — أي بند خارج القائمة ليس blocker لإغلاقها:
+**إغلاق Phase 4 مشروط حصرياً بهذه الأربع** — كلها committed محلياً على baseline `fba93e4`:
 
 1. ✅ **Deliveries + confirm + collection** (Phase 4.0 + 4.0.1 + 4.0.2 — committed).
-2. ✅ **Invoice core + PDF + avoir** (Phase 4.1 + 4.1.1 + 4.1.2 committed؛ **avoir core** في Phase 4.5).
-3. ⏳ **Treasury core + handover + transfer + reconcile** (Phase 4.2 + 4.2.1 committed؛ **transfer + reconcile** في Phase 4.3).
-4. ⏳ **Settlements + `/my-bonus` + `cancel_as_debt`** (Phase 4.4 — يغلق BR-18 / BR-19).
+2. ✅ **Invoice core + PDF + avoir** (Phase 4.1 + 4.1.1 + 4.1.2 committed؛ **avoir core** في Phase 4.5 — committed at `1cab312` + post-review fixes at `fba93e4`).
+3. ✅ **Treasury core + handover + transfer + reconcile** (Phase 4.2 + 4.2.1 committed؛ transfer + reconcile في Phase 4.3؛ money-precision 2-decimal في Phase 4.3.1 + 4.3.2).
+4. ✅ **Settlements + `/my-bonus` + `cancel_as_debt`** (Phase 4.4 — BR-18 / BR-19 closed؛ UI completion + canonical-API + nav sync في Phase 4.4.1 at `5807b3b`).
 
 **مؤجَّل صراحة إلى ما بعد Phase 4 — NOT a closure blocker**:
 - **`/api/v1/distributions`** (Profit Distributions) → **Phase 6**. المبرِّر: expert-comptable يتولاها خارج النظام.
@@ -379,10 +379,10 @@ No production deployment without T+1h and T+24h monitoring reports.
 - أي ميزة من Phase 5 / 6 بشكل عام.
 
 **خطوات إغلاق Phase 4 بعد baseline `4ba4c65`** (tranche واحدة في كل خطوة، Contract → تنفيذ → Self-Review → D-78 → gates → local commit → توقف):
-- **Step 1** → Phase 4.3 (Treasury transfer + reconcile، أربع categories فقط: funding / manager_settlement / bank_deposit / bank_withdrawal).
-- **Step 2** → Phase 4.4 (Settlements + `/my-bonus` read-only + cancel_as_debt → negative settlement).
-- **Step 3** → Phase 4.5 (Avoir core: POST /api/v1/invoices/[id]/avoir + avoir PDF).
-- **Step 4** → Phase 4 Closure Pack (docs-only ما لم يكشف المراجع gap جديد).
+- ✅ **Step 1** → Phase 4.3 (Treasury transfer + reconcile، أربع categories فقط: funding / manager_settlement / bank_deposit / bank_withdrawal) — committed `ef5c57f` + 4.3.1 `e67cb26` + 4.3.2 `e0c8d20`.
+- ✅ **Step 2** → Phase 4.4 (Settlements + `/my-bonus` read-only + cancel_as_debt → negative settlement) — committed `e86d265` + 4.4.1 UI+nav `5807b3b`.
+- ✅ **Step 3** → Phase 4.5 (Avoir core: POST /api/v1/invoices/[id]/avoir + avoir PDF) — committed `1cab312` + post-review fixes `fba93e4`.
+- ✅ **Step 4** → Phase 4 Closure Pack (docs-only reconciliation) — this commit.
 
 #### Scope النصي الأصلي (reviewer decision 2026-04-20)
 
@@ -449,9 +449,11 @@ No production deployment without T+1h and T+24h monitoring reports.
 
 ---
 
-### Phase 5 — Notifications + Voice + Polish — **XL (8-12 يوم)**
+### Phase 5 — Notifications + Activity + Dashboards/Reports + Voice (re-eval) + Polish — **XL (8-12 يوم)**
 
-**الهدف**: نظام الإشعارات يعمل، الصوت مدمج، PWA جاهز، اختبارات 200+.
+**الهدف (الترتيب الكنسي المعتمَد 2026-04-22)**: (1) notifications → (2) activity explorer → (3) dashboards + reports → (4) voice (re-eval أولاً، وإن اعتُمد تنفيذ كامل) → (5) polish.
+
+**خارج نطاق Phase 5 (مؤكَّد — كلها Phase 6)**: Permissions UI، `/distributions`، Command Palette (Ctrl+K).
 
 **المهام الفنية**:
 1. **Notifications**:
@@ -462,9 +464,9 @@ No production deployment without T+1h and T+24h monitoring reports.
    - **DataTables**: polling 90s adaptive → 180s بعد 3 دقائق idle (D-42).
    - **لا SSE (D-41)** — محذوف.
    - أحداث: order created/confirmed/cancelled, payment overdue, low stock, settlement due, etc.
-2. **Activity log UI**: `/activity` مع filters (entity_type + date range + user). PM/GM فقط. Manager يرى فقط نشاط فريقه.
-3. **Permissions matrix UI**: `/permissions` (PM only). مصفوفة interactive 6×15×5.
-4. **Voice system** — نقل كامل حسب [`32_Voice_System.md`](requirements-analysis/32_Voice_System.md):
+2. **Activity log UI**: `/activity` مع filters (entity_type + date range + user). PM/GM فقط. Manager يرى فقط نشاط فريقه. الـ DB + hash chain موجودان منذ Phase 3.
+3. **Dashboards + Reports**: `/dashboard` (role-scoped KPIs + charts) + reports (P&L 3 views + seller performance + profit per order + top clients/suppliers). **ملاحظة**: `/action-hub` يبقى home لـ pm/gm/manager (D-72) — `/dashboard` صفحة deep-analysis وليست الصفحة الأولى.
+4. **Voice system** — **re-evaluation أولاً**. إذا اعتُمد الاستمرار، تنفيذ كامل حسب [`32_Voice_System.md`](requirements-analysis/32_Voice_System.md):
    - Modules: `normalizer`, `blacklist`, `prompt`, `action-classifier`, `entity-resolver`, `alias-generator`.
    - Routes: `/api/voice/process`, `/api/voice/learn`.
    - `VoiceButton.tsx` مع Web Audio RMS silence detector.
@@ -496,18 +498,21 @@ No production deployment without T+1h and T+24h monitoring reports.
 
 ---
 
-### Phase 6 — تجهيز الموبايل والتحسين — **M (5-7 أيام)**
+### Phase 6 — Permissions UI + /distributions + Mobile-Readiness + Polish — **M (5-7 أيام)**
 
-**الهدف**: API جاهز للاستهلاك من تطبيق React Native مستقبلاً، تحسينات أداء مبنية على القياس.
+**الهدف**: ثلاث ميزات UI مُؤجَّلة من Phase 4/5 (Permissions matrix interactive، Profit Distributions، Command Palette) + تجهيز API للاستهلاك من موبايل + تحسينات أداء مبنية على القياس.
 
 **المهام الفنية**:
-1. **OpenAPI من Zod**: script يحوِّل كل Zod schema إلى OpenAPI 3.1 spec → `public/openapi.json`.
-2. **API versioning**: نقل كل routes إلى `/api/v1/*`. إبقاء `/api/*` كـ alias خلال فترة انتقالية.
-3. **Perf audit**:
+1. **Permissions matrix UI** (`/permissions`): مصفوفة interactive 6×N (6 roles × resources × actions) لـ PM فقط. واجهة على الـ `/api/v1/permissions` الـ GET/PUT الموجود منذ Phase 1. invalidation فوري للـ permission cache عند الحفظ.
+2. **Profit Distributions** (`/api/v1/distributions` + `/distributions` UI): pm/gm يُنشئون groups للفترات، `pg_advisory_xact_lock(hashtext(period_key))` للحماية من السباقات، تتبّع `distributed` مقابل `distributable`.
+3. **Command Palette (Ctrl+K)**: بحث في routes المسموحة للمستخدم (من `/api/v1/me.nav`). Keyboard-first (D-71 polish).
+4. **OpenAPI من Zod**: script يحوِّل كل Zod schema إلى OpenAPI 3.1 spec → `public/openapi.json`.
+5. **API versioning**: نقل كل routes إلى `/api/v1/*`. إبقاء `/api/*` كـ alias خلال فترة انتقالية.
+6. **Perf audit**:
    - إضافة `EXPLAIN ANALYZE` على أبطأ 10 endpoints.
    - Neon console → slow query log.
    - Missing indexes → هجرة جديدة.
-4. **Read-only Neon role** للتقارير:
+7. **Read-only Neon role** للتقارير:
    ```sql
    CREATE ROLE reporter LOGIN PASSWORD '...';
    GRANT CONNECT ON DATABASE neondb TO reporter;
@@ -515,13 +520,13 @@ No production deployment without T+1h and T+24h monitoring reports.
    GRANT SELECT ON ALL TABLES IN SCHEMA public TO reporter;
    ```
    استخدامه من lambda reporting job.
-5. **Retention verification**: تأكد من أن الـ 2 cron jobs (`daily` + `hourly`) تعمل ضمن حصة Vercel Hobby؛ Vercel Cron dashboard (D-23).
-6. **Sentry integration** (اختياري على الـ free tier): error tracking + performance tracing.
-7. **Lighthouse audit** على أهم 5 صفحات، الحد الأدنى 90 على mobile + desktop.
-8. **Documentation pass**:
-   - كل helper له JSDoc.
-   - README.md في جذر المشروع.
-   - `docs/onboarding.md` لأي مطوِّر جديد.
+8. **Retention verification**: تأكد من أن الـ 2 cron jobs (`daily` + `hourly`) تعمل ضمن حصة Vercel Hobby؛ Vercel Cron dashboard (D-23).
+9. **Sentry integration** (اختياري على الـ free tier): error tracking + performance tracing.
+10. **Lighthouse audit** على أهم 5 صفحات، الحد الأدنى 90 على mobile + desktop.
+11. **Documentation pass**:
+    - كل helper له JSDoc.
+    - README.md في جذر المشروع.
+    - `docs/onboarding.md` لأي مطوِّر جديد.
 
 **المخاطر والمعالجة**:
 - ⚠️ **Zod → OpenAPI mapping غير ممتاز للـ refine** → الحل: مكتبة `@asteasolutions/zod-to-openapi` تغطي 95٪. للباقي، تعليق يدوي.

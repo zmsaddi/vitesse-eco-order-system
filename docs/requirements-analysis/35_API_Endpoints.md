@@ -124,7 +124,7 @@
 | `/api/v1/users` | GET/POST/PUT | pm,gm | إدارة المستخدمين (لا DELETE) |
 | `/api/v1/users/bonus-rates` | GET/PUT/DELETE | pm,gm | تجاوزات العمولة |
 | `/api/v1/settings` | GET/PUT | pm,gm | الإعدادات |
-| `/api/v1/permissions` | GET/PUT | pm | الصلاحيات |
+| `/api/v1/permissions` | GET/PUT | pm | **Phase 6 — UI pending** (Phase 5 exit criteria explicitly excludes it). GET متاح منذ Phase 1 لـ middleware + sidebar؛ PUT + interactive `/permissions` matrix UI مؤجَّلة إلى Phase 6 مع OpenAPI + mobile readiness. |
 | `/api/backup` | GET/POST | pm,gm | تنزيل/استعادة نسخة (C4) |
 | `/api/health` | GET | عام | DB latency + timestamp |
 | `/api/v1/expenses` | GET/POST/PUT | pm,gm,manager | **(D-76 + D-04)** المصاريف — **لا DELETE**. تصحيح مصروف خاطئ يمر عبر `/[id]/reverse` (أدناه). |
@@ -139,7 +139,7 @@
 | `/api/v1/notifications/preferences` | GET/PUT | الكل | تفضيلاتي (channel = in_app فقط — D-22) |
 
 ~~`/api/v1/notifications/stream`~~ **محذوف (D-41)** — SSE لم يُحقَّق على Neon HTTP + Vercel timeout 300s. Polling هو الحل الوحيد.
-| `/api/v1/activity` | GET | pm,gm,manager(👁) | سجل النشاطات |
+| `/api/v1/activity` | GET | pm,gm,manager(👁) | **Phase 5 — UI pending** (explorer `/activity` page). الـ DB + hash-chain writes موجودان منذ Phase 3 لكل mutation؛ endpoint الـ GET + الصفحة للـ filters (entity_type + date range + user) تصلان في Phase 5 (Step 2 بعد notifications). manager يرى فقط نشاط فريقه. |
 
 ## الصوت
 
