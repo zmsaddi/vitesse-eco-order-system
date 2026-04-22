@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
 import { withRead } from "@/db/client";
 import { requireRole } from "@/lib/session-claims";
 import { apiError, ValidationError } from "@/lib/api-errors";
+import { jsonWithUnreadCount } from "@/lib/unread-count-header";
 import { getInvoiceById } from "@/modules/invoices/service";
 
 export const runtime = "nodejs";
@@ -32,7 +32,7 @@ export async function GET(request: Request, { params }: Params) {
         role: claims.role,
       }),
     );
-    return NextResponse.json(detail);
+    return await jsonWithUnreadCount(detail, 200, claims.userId);
   } catch (err) {
     return apiError(err);
   }

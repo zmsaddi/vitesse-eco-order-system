@@ -1,6 +1,8 @@
 # الإشعارات والتنبيهات — Notifications
 
 > **رقم العنصر**: #26 | **المحور**: هـ | **الحالة**: مواصفات نهائية
+> **Phase 5.1a — API + emitters shipped** (2026-04-22). UI (bell + `/notifications` + `/settings/notifications`) يُشحن في Phase 5.1b.
+> **Emission coverage**: 11 من 14 حدثًا موصَّلة بمصدر حيّ في 5.1a. الثلاثة المتبقية — `GIFT_POOL_FILLED` + `OVERDUE_PAYMENT` + `RECONCILIATION_REMINDER` — routing + preference row + UI toggle تُشحن في 5.1a، لكن مواقع الإصدار الفعلية تنتظر infrastructure لم يُشحن بعد (endpoint تعبئة gift_pool للأول؛ cron يومي للآخريْن). موثَّق صراحة في `phase-5.1a-delivery-report.md` §Known Gaps، ليس silent omission.
 
 ---
 

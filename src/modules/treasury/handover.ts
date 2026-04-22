@@ -7,6 +7,7 @@ import {
   PermissionError,
 } from "@/lib/api-errors";
 import { logActivity } from "@/lib/activity-log";
+import { emitNotifications } from "@/modules/notifications/events";
 import type { HandoverInput } from "./dto";
 import {
   findAccountByOwnerAndType,
@@ -194,6 +195,16 @@ export async function performHandover(
       custodyBalanceAfter: newCustody,
       managerBoxBalanceAfter: newBox,
     },
+  });
+
+  // Phase 5.1 — DRIVER_HANDOVER_DONE → manager (line 40 of the matrix).
+  // `driver.managerId` is non-null here by BR-55b invariant (the guard above
+  // already threw CUSTODY_DRIVER_UNLINKED otherwise).
+  await emitNotifications(tx, {
+    type: "DRIVER_HANDOVER_DONE",
+    movementId: movementInserted[0].id,
+    managerUserId: driver.managerId,
+    amount: amount.toFixed(2),
   });
 
   return {

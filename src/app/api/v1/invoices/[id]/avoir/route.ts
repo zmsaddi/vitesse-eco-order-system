@@ -37,6 +37,7 @@ export async function POST(request: Request, { params }: Params) {
       {
         endpoint: "POST /api/v1/invoices/[id]/avoir",
         username: claims.username,
+        userId: claims.userId,
         body: { parentInvoiceId, ...parsed.data },
         requireHeader: "required",
       },

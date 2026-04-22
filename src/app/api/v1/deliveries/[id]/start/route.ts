@@ -30,6 +30,7 @@ export async function POST(request: Request, { params }: Params) {
       {
         endpoint: "POST /api/v1/deliveries/[id]/start",
         username: claims.username,
+        userId: claims.userId,
         body: { deliveryId },
         requireHeader: "required",
       },

@@ -48,6 +48,7 @@ export async function PUT(request: Request, { params }: Params) {
       {
         endpoint: "PUT /api/v1/expenses/[id]",
         username: claims.username,
+        userId: claims.userId,
         body: { id: expenseId, ...parsed.data },
         requireHeader: "optional",
       },

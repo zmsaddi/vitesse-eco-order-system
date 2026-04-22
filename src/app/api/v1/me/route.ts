@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
 import { withRead } from "@/db/client";
 import { requireClaims } from "@/lib/session-claims";
 import { apiError } from "@/lib/api-errors";
+import { jsonWithUnreadCount } from "@/lib/unread-count-header";
 import { getUserById } from "@/modules/users/service";
 import { getNavForRole } from "@/modules/users/nav";
 
@@ -17,16 +17,20 @@ export async function GET(request: Request) {
     const claims = await requireClaims(request);
     const user = await withRead(undefined, (db) => getUserById(db, claims.userId));
 
-    return NextResponse.json({
-      claims: {
-        userId: claims.userId,
-        username: claims.username,
-        role: claims.role,
-        name: claims.name,
+    return await jsonWithUnreadCount(
+      {
+        claims: {
+          userId: claims.userId,
+          username: claims.username,
+          role: claims.role,
+          name: claims.name,
+        },
+        user,
+        nav: getNavForRole(claims.role),
       },
-      user,
-      nav: getNavForRole(claims.role),
-    });
+      200,
+      claims.userId,
+    );
   } catch (err) {
     return apiError(err);
   }

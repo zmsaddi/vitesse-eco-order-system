@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withRead, withTxInRoute } from "@/db/client";
 import { requireRole } from "@/lib/session-claims";
 import { apiError, ValidationError } from "@/lib/api-errors";
+import { jsonWithUnreadCount } from "@/lib/unread-count-header";
 import { createProduct, listProducts } from "@/modules/products/service";
 import { CreateProductInput } from "@/modules/products/dto";
 
@@ -10,7 +11,7 @@ export const runtime = "nodejs";
 export async function GET(request: Request) {
   try {
     // All authenticated roles can view products (sellers see them too — for order form).
-    await requireRole(request, ["pm", "gm", "manager", "seller", "driver", "stock_keeper"]);
+    const claims = await requireRole(request, ["pm", "gm", "manager", "seller", "driver", "stock_keeper"]);
     const url = new URL(request.url);
     const limit = url.searchParams.has("limit") ? Number(url.searchParams.get("limit")) : undefined;
     const offset = url.searchParams.has("offset") ? Number(url.searchParams.get("offset")) : undefined;
@@ -18,7 +19,11 @@ export async function GET(request: Request) {
     const result = await withRead(undefined, (db) =>
       listProducts(db, { limit, offset, includeInactive }),
     );
-    return NextResponse.json({ products: result.rows, total: result.total });
+    return await jsonWithUnreadCount(
+      { products: result.rows, total: result.total },
+      200,
+      claims.userId,
+    );
   } catch (err) {
     return apiError(err);
   }

@@ -20,6 +20,7 @@ import { round2 } from "@/lib/money";
 import { bridgeCollection } from "@/modules/treasury/service";
 import { ensureDriverAssigned } from "./assign";
 import { computeBonusesOnConfirm } from "./bonuses";
+import { emitDeliveryConfirmedWithPayment } from "./emit-notifications";
 import { deliveryRowToDto } from "./mappers";
 import {
   enforceDeliveryMutationPermission,
@@ -340,6 +341,15 @@ export async function confirmDelivery(
       invoiceId: issued.id,
       invoiceRefCode: issued.refCode,
     },
+  });
+
+  // Phase 5.1 — delivery-confirm fan-out: DELIVERY_CONFIRMED (pm/gm/seller)
+  // + PAYMENT_RECEIVED (pm/gm) if paid > 0. Extracted to emit-notifications.ts.
+  await emitDeliveryConfirmedWithPayment(tx, {
+    deliveryId: id,
+    orderId: order.id,
+    orderSellerUsername: order.created_by,
+    paidAmount,
   });
 
   const rows = await tx

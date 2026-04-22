@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
 import { withRead, withTxInRoute } from "@/db/client";
 import { requireRole } from "@/lib/session-claims";
 import { apiError, ValidationError } from "@/lib/api-errors";
+import { jsonWithUnreadCount } from "@/lib/unread-count-header";
 import { getAllSettings, getInvoiceReadiness, updateSettings } from "@/modules/settings/service";
 import { SettingsPatch } from "@/modules/settings/dto";
 
@@ -15,12 +15,12 @@ export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   try {
-    await requireRole(request, ["pm", "gm"]);
+    const claims = await requireRole(request, ["pm", "gm"]);
     const [settings, readiness] = await Promise.all([
       withRead(undefined, (db) => getAllSettings(db)),
       withRead(undefined, (db) => getInvoiceReadiness(db)),
     ]);
-    return NextResponse.json({ settings, invoiceReadiness: readiness });
+    return await jsonWithUnreadCount({ settings, invoiceReadiness: readiness }, 200, claims.userId);
   } catch (err) {
     return apiError(err);
   }
@@ -40,7 +40,7 @@ export async function PUT(request: Request) {
       updateSettings(tx, parsed.data, claims.username),
     );
     const readiness = await withRead(undefined, (db) => getInvoiceReadiness(db));
-    return NextResponse.json({ settings: updated, invoiceReadiness: readiness });
+    return await jsonWithUnreadCount({ settings: updated, invoiceReadiness: readiness }, 200, claims.userId);
   } catch (err) {
     return apiError(err);
   }

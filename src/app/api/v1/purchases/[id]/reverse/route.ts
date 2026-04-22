@@ -32,6 +32,7 @@ export async function POST(request: Request, { params }: Params) {
       {
         endpoint: "POST /api/v1/purchases/[id]/reverse",
         username: claims.username,
+        userId: claims.userId,
         body: { purchaseId, ...parsed.data },
         requireHeader: "required",
       },

@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
 import { withRead } from "@/db/client";
 import { requireRole } from "@/lib/session-claims";
 import { apiError, ValidationError } from "@/lib/api-errors";
+import { jsonWithUnreadCount } from "@/lib/unread-count-header";
 import { redactOrderForRole } from "@/modules/orders/redaction";
 import { getOrderById } from "@/modules/orders/service";
 
@@ -24,7 +24,7 @@ export async function GET(request: Request, { params }: Params) {
       throw new ValidationError("معرِّف الطلب غير صحيح");
     }
     const order = await withRead(undefined, (db) => getOrderById(db, orderId, claims));
-    return NextResponse.json({ order: redactOrderForRole(order, claims.role) });
+    return await jsonWithUnreadCount({ order: redactOrderForRole(order, claims.role) }, 200, claims.userId);
   } catch (err) {
     return apiError(err);
   }

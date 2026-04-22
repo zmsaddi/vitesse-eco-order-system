@@ -33,6 +33,7 @@ export async function POST(request: Request, { params }: Params) {
       {
         endpoint: "POST /api/v1/expenses/[id]/reverse",
         username: claims.username,
+        userId: claims.userId,
         body: { expenseId, ...parsed.data },
         requireHeader: "required",
       },

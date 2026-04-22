@@ -26,6 +26,7 @@ export async function POST(request: Request) {
       {
         endpoint: "POST /api/v1/deliveries",
         username: claims.username,
+        userId: claims.userId,
         body: parsed.data,
         requireHeader: "optional",
       },

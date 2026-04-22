@@ -64,6 +64,11 @@ export default defineConfig({
         "src/modules/settlements/credit.ts",      // Phase 4.4 — unapplied-debt lock + sum helpers (integration)
         "src/modules/settlements/source-account.ts", // Phase 4.4 — source-type + paymentMethod invariants (integration-exercised via payout/reward)
         "src/modules/invoices/avoir/issue.ts",    // Phase 4.5 — avoir issuance tx + FOR UPDATE on parent + lines + children (integration)
+        "src/modules/notifications/events.ts",    // Phase 5.1a — notification fan-out routing + preference filtering (DB-heavy, integration)
+        "src/modules/notifications/service.ts",   // Phase 5.1a — lazy-seed + list/mark/prefs (integration)
+        "src/modules/orders/emit-notifications.ts",    // Phase 5.1a — thin wrapper; tested via Phase-4 flow integration
+        "src/modules/deliveries/emit-notifications.ts", // Phase 5.1a — thin wrapper; tested via confirm-delivery integration
+        "src/lib/unread-count-header.ts",         // Phase 5.1a — in-memory cache + DB count (integration)
         "src/modules/**/mappers.ts", // Trivial projections — covered via integration
         "src/modules/**/service.ts", // Business logic — covered by integration tests (require DB)
         "src/modules/users/nav.ts",  // Trivial re-export — covered via integration

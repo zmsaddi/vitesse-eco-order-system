@@ -12,6 +12,7 @@ import {
   NotFoundError,
 } from "@/lib/api-errors";
 import { logActivity } from "@/lib/activity-log";
+import { emitNotifications } from "@/modules/notifications/events";
 import { ensureDriverAssigned } from "./assign";
 import { deliveryRowToDto } from "./mappers";
 import {
@@ -172,6 +173,26 @@ export async function createDelivery(
       assignedDriverId: driver?.id ?? null,
     },
   });
+
+  // Phase 5.1 — driver-facing notifications at delivery-with-driver creation.
+  // ORDER_READY_FOR_DELIVERY (line 32 of the matrix) + NEW_TASK (line 36)
+  // both target the assigned driver. They fire together because the
+  // matrix lists them as distinct toggles (the user can disable either
+  // independently in /settings/notifications).
+  if (driver) {
+    await emitNotifications(tx, {
+      type: "ORDER_READY_FOR_DELIVERY",
+      deliveryId: delivery.id,
+      deliveryRefCode: refCode,
+      assignedDriverId: driver.id,
+    });
+    await emitNotifications(tx, {
+      type: "NEW_TASK",
+      deliveryId: delivery.id,
+      deliveryRefCode: refCode,
+      assignedDriverId: driver.id,
+    });
+  }
 
   return deliveryRowToDto(delivery);
 }

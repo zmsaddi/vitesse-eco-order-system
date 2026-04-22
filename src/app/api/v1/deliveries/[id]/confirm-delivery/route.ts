@@ -43,6 +43,7 @@ export async function POST(request: Request, { params }: Params) {
       {
         endpoint: "POST /api/v1/deliveries/[id]/confirm-delivery",
         username: claims.username,
+        userId: claims.userId,
         body: { deliveryId, ...parsed.data },
         requireHeader: "required",
       },

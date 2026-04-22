@@ -8,6 +8,7 @@ import {
   userBonusRates,
 } from "@/db/schema";
 import { BusinessRuleError } from "@/lib/api-errors";
+import { emitNotifications } from "@/modules/notifications/events";
 import type { Role } from "@/lib/session-claims";
 import type { CreateOrderItemInput } from "./dto";
 
@@ -221,6 +222,7 @@ export async function processOrderItem(
       buyPrice: products.buyPrice,
       sellPrice: products.sellPrice,
       stock: products.stock,
+      lowStockThreshold: products.lowStockThreshold,
       active: products.active,
     })
     .from(products)
@@ -328,10 +330,25 @@ export async function processOrderItem(
   const commissionRuleSnapshot = await buildCommissionSnapshot(tx, ctx, product.category);
 
   // Decrement product stock (BR-38 — gifts too, "مثل أي صنف").
+  const newStock = currentStock - input.quantity;
   await tx
     .update(products)
-    .set({ stock: (currentStock - input.quantity).toFixed(2) })
+    .set({ stock: newStock.toFixed(2) })
     .where(eq(products.id, input.productId));
+
+  // Phase 5.1 — LOW_STOCK notification on the threshold-crossing edge.
+  // Fires only when this decrement took the stock BELOW the threshold AND
+  // the stock was ABOVE the threshold immediately before. Prevents every
+  // subsequent sale from re-spamming once already low.
+  const threshold = product.lowStockThreshold ?? 0;
+  if (threshold > 0 && newStock < threshold && currentStock >= threshold) {
+    await emitNotifications(tx, {
+      type: "LOW_STOCK",
+      productId: input.productId,
+      productName: product.name,
+      remainingStock: newStock.toFixed(2),
+    });
+  }
 
   return {
     productId: input.productId,

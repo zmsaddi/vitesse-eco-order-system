@@ -61,6 +61,7 @@ export async function POST(request: Request) {
       {
         endpoint: "POST /api/v1/settlements",
         username: claims.username,
+        userId: claims.userId,
         body: parsed.data,
         requireHeader: "required",
       },

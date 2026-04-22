@@ -33,6 +33,7 @@ export async function POST(request: Request, { params }: Params) {
       {
         endpoint: "POST /api/v1/orders/[id]/cancel",
         username: claims.username,
+        userId: claims.userId,
         body: { orderId, ...parsed.data },
         requireHeader: "required",
       },

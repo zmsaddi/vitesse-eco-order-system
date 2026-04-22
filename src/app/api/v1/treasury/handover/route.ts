@@ -33,6 +33,7 @@ export async function POST(request: Request) {
       {
         endpoint: "POST /api/v1/treasury/handover",
         username: claims.username,
+        userId: claims.userId,
         body: parsed.data,
         requireHeader: "required",
       },

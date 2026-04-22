@@ -1,5 +1,5 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
-import type { DbHandle, DbTx } from "@/db/client";
+import type { DbTx } from "@/db/client";
 import {
   cancellations,
   clients,
@@ -18,12 +18,16 @@ import {
 } from "@/lib/hash-chain";
 import { applyBonusActionsOnCancel } from "./cancel-bonuses";
 import {
+  emitOrderCancelled,
+  emitOrderCreated,
+  emitOrderStartedPreparation,
+} from "./emit-notifications";
+import {
   acquireOrderCreateLocks,
   assertNoDuplicateVinAcrossOrders,
   assertNoDuplicateVinWithinRequest,
 } from "./locks";
-import { orderRowToDto } from "./mappers";
-import { enforceCancelPermission, enforceOrderVisibility, type OrderClaims } from "./permissions";
+import { enforceCancelPermission, type OrderClaims } from "./permissions";
 import { loadPricingContext, processOrderItem } from "./pricing";
 import { generateOrderRefCode } from "./ref-code";
 import type {
@@ -39,52 +43,9 @@ import type {
 // - cancellations chain verifier for tests → ./chain.ts.
 
 export type { OrderClaims } from "./permissions";
-
-export async function getOrderById(
-  db: DbHandle,
-  id: number,
-  claims: OrderClaims,
-): Promise<OrderDto> {
-  const orderRows = await db
-    .select()
-    .from(orders)
-    .where(and(eq(orders.id, id), isNull(orders.deletedAt)))
-    .limit(1);
-  if (orderRows.length === 0) throw new NotFoundError(`الطلب رقم ${id}`);
-
-  enforceOrderVisibility(orderRows[0], claims);
-
-  const items = await db
-    .select()
-    .from(orderItems)
-    .where(and(eq(orderItems.orderId, id), isNull(orderItems.deletedAt)));
-
-  return orderRowToDto(orderRows[0], items);
-}
-
-/**
- * Internal read used by mutation echoes (post-create/transition/cancel). The
- * role-based visibility check applies to external GET requests; once the caller
- * has already passed their mutation's permission gate, echoing the row back is
- * safe even if their role wouldn't satisfy the broader GET visibility rules
- * (e.g. stock_keeper completing a state transition).
- */
-async function fetchOrderInternal(
-  db: DbHandle | DbTx,
-  id: number,
-): Promise<OrderDto> {
-  const orderRows = await db
-    .select()
-    .from(orders)
-    .where(and(eq(orders.id, id), isNull(orders.deletedAt)))
-    .limit(1);
-  if (orderRows.length === 0) throw new NotFoundError(`الطلب رقم ${id}`);
-  const items = await db
-    .select()
-    .from(orderItems)
-    .where(and(eq(orderItems.orderId, id), isNull(orderItems.deletedAt)));
-  return orderRowToDto(orderRows[0], items);
-}
+// Phase 5.1 — read path moved to ./read.ts to fit under max-lines.
+import { fetchOrderInternal } from "./read";
+export { fetchOrderInternal, getOrderById } from "./read";
 
 export async function createOrder(
   tx: DbTx,
@@ -178,6 +139,9 @@ export async function createOrder(
     },
   });
 
+  // Phase 5.1 — ORDER_CREATED notification fan-out (pm/gm/manager/stock_keeper).
+  await emitOrderCreated(tx, orderId, refCode);
+
   return fetchOrderInternal(tx, orderId);
 }
 
@@ -224,6 +188,14 @@ async function transitionStatus(
     username: claims.username,
     details: { transition: `${from} → ${to}` },
   });
+
+  // Phase 5.1 — ORDER_STARTED_PREPARATION notification → stock_keeper only.
+  // Fires at the محجوز → قيد التحضير transition (mark-ready has no separate
+  // event in the matrix; ORDER_READY_FOR_DELIVERY fires at delivery creation
+  // when a driver is assigned, not at mark-ready).
+  if (to === "قيد التحضير") {
+    await emitOrderStartedPreparation(tx, id);
+  }
 
   return fetchOrderInternal(tx, id);
 }
@@ -349,6 +321,9 @@ export async function cancelOrder(
       driverDebtAmount: bonusOutcome.driverDebtAmount,
     },
   });
+
+  // Phase 5.1 — ORDER_CANCELLED notification fan-out (pm/gm + seller + linked driver if any).
+  await emitOrderCancelled(tx, id, current.created_by);
 
   return fetchOrderInternal(tx, id);
 }

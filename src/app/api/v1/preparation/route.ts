@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
 import { withRead } from "@/db/client";
 import { requireRole } from "@/lib/session-claims";
 import { apiError } from "@/lib/api-errors";
+import { jsonWithUnreadCount } from "@/lib/unread-count-header";
 import { listPreparationQueue } from "@/modules/orders/preparation";
 import { redactOrdersForRole } from "@/modules/orders/redaction";
 
@@ -25,10 +25,10 @@ export async function GET(request: Request) {
     const result = await withRead(undefined, (db) =>
       listPreparationQueue(db, { limit, offset }),
     );
-    return NextResponse.json({
+    return await jsonWithUnreadCount({
       orders: redactOrdersForRole(result.rows, claims.role),
       total: result.total,
-    });
+    }, 200, claims.userId);
   } catch (err) {
     return apiError(err);
   }

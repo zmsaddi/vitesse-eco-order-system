@@ -13,6 +13,7 @@ import {
 } from "@/lib/api-errors";
 import { logActivity } from "@/lib/activity-log";
 import { round2 } from "@/lib/money";
+import { emitNotifications } from "@/modules/notifications/events";
 import {
   lockAccountForUpdate,
   parisIsoDate,
@@ -144,6 +145,15 @@ export async function performRewardPayout(
       fromAccountId: source.id,
       fromAccountType: source.type,
     },
+  });
+
+  // Phase 5.1 — SETTLEMENT_ISSUED (kind=reward) → target user (line 38 of matrix).
+  await emitNotifications(tx, {
+    type: "SETTLEMENT_ISSUED",
+    settlementId: settlementRow.id,
+    targetUserId: user.id,
+    kind: "reward",
+    amount: amount.toFixed(2),
   });
 
   return {

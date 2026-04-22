@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
 import { withRead, withTxInRoute } from "@/db/client";
 import { requireRole } from "@/lib/session-claims";
 import { apiError, ValidationError } from "@/lib/api-errors";
+import { jsonWithUnreadCount } from "@/lib/unread-count-header";
 import { getClientById, updateClient } from "@/modules/clients/service";
 import { UpdateClientInput } from "@/modules/clients/dto";
 
@@ -13,7 +13,7 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function GET(request: Request, { params }: Params) {
   try {
-    await requireRole(request, ["pm", "gm", "manager", "seller"]);
+    const claims = await requireRole(request, ["pm", "gm", "manager", "seller"]);
     const { id } = await params;
     const clientId = Number(id);
     if (!Number.isFinite(clientId) || clientId < 1) {
@@ -21,7 +21,7 @@ export async function GET(request: Request, { params }: Params) {
     }
 
     const client = await withRead(undefined, (db) => getClientById(db, clientId));
-    return NextResponse.json({ client });
+    return await jsonWithUnreadCount({ client }, 200, claims.userId);
   } catch (err) {
     return apiError(err);
   }
@@ -47,7 +47,7 @@ export async function PUT(request: Request, { params }: Params) {
     const client = await withTxInRoute(undefined, (tx) =>
       updateClient(tx, clientId, parsed.data, claims.username),
     );
-    return NextResponse.json({ client });
+    return await jsonWithUnreadCount({ client }, 200, claims.userId);
   } catch (err) {
     return apiError(err);
   }

@@ -135,8 +135,10 @@
 
 | المسار | Method | الأدوار | الوصف |
 |--------|--------|---------|-------|
-| `/api/v1/notifications` | GET | الكل | إشعاراتي (pagination). يُستدعى on-demand عند فتح Bell Dropdown (D-42). كل API response عادية تحمل `X-Unread-Count` header للـ badge. |
-| `/api/v1/notifications/preferences` | GET/PUT | الكل | تفضيلاتي (channel = in_app فقط — D-22) |
+| `/api/v1/notifications` | GET | الكل (own-only auto-forced) | **Phase 5.1a — shipped** — إشعاراتي (pagination). Query: `limit` (1..200 default 50), `offset`, `type?` (14-enum), `unread?` (boolean). Response: `{ items, total, unreadCount }`. يُستدعى on-demand عند فتح Bell Dropdown (D-42) — لا polling مستقل. كل استجابة Authenticated API تحمل `X-Unread-Count` header للـ badge (attached globally via `withIdempotencyRoute` + `jsonWithUnreadCount` wrappers). |
+| `/api/v1/notifications/[id]/mark-read` | POST | الكل (own-only) | **Phase 5.1a — shipped** — يضبط `read_at=NOW()` لإشعار واحد. ownership check: 403 `NOTIFICATION_NOT_OWNER` إذا `notification.user_id !== claims.userId`. idempotent بطبيعته (replay يعيد نفس الصف). Idempotency-Key غير مطلوب. |
+| `/api/v1/notifications/mark-all-read` | POST | الكل (own-only) | **Phase 5.1a — shipped** — يضبط `read_at=NOW()` لكل إشعار غير مقروء للمستخدم. Response: `{ updatedCount }`. |
+| `/api/v1/notifications/preferences` | GET/PUT | الكل (own-only) | **Phase 5.1a — shipped** — تفضيلاتي (channel = in_app فقط — D-22). GET يُنشئ 14 صف lazy-seed عند أول استدعاء (`enabled=true`). PUT body: `{ updates: [{ notificationType, enabled }] }`. |
 
 ~~`/api/v1/notifications/stream`~~ **محذوف (D-41)** — SSE لم يُحقَّق على Neon HTTP + Vercel timeout 300s. Polling هو الحل الوحيد.
 | `/api/v1/activity` | GET | pm,gm,manager(👁) | **Phase 5 — UI pending** (explorer `/activity` page). الـ DB + hash-chain writes موجودان منذ Phase 3 لكل mutation؛ endpoint الـ GET + الصفحة للـ filters (entity_type + date range + user) تصلان في Phase 5 (Step 2 بعد notifications). manager يرى فقط نشاط فريقه. |

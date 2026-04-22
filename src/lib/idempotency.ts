@@ -4,6 +4,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { withTxInRoute, type DbTx, type WithTxContext } from "@/db/client";
 import { idempotencyKeys } from "@/db/schema";
 import { BusinessRuleError, ConflictError, apiError } from "@/lib/api-errors";
+import { withUnreadCountHeader } from "@/lib/unread-count-header";
 
 // D-79: route-level Idempotency-Key wrapper.
 // - PK lookup on (key, endpoint). `endpoint` is stored as full "METHOD /path/[param]/…".
@@ -20,6 +21,12 @@ export type IdempotencyConfig = {
   endpoint: string;
   /** Authenticated caller; compared against stored row.username on replay. */
   username: string;
+  /**
+   * Authenticated caller's numeric userId. Phase 5.1: used by the wrapper to
+   * attach `X-Unread-Count` to the response (D-42). Optional for backward
+   * compat — when missing, the header is simply omitted.
+   */
+  userId?: number;
   /** Parsed request body; hashed to detect "same key, different body" collisions. */
   body: unknown;
   /** Per D-16 contract: 'required' for cancel/collect/settlements/distributions, 'optional' elsewhere. */
@@ -57,7 +64,10 @@ export async function withIdempotencyRoute(
       }
       // optional — run handler without idempotency guarantees.
       const result = await withTxInRoute(ctx, handler);
-      return NextResponse.json(result.body, { status: result.status });
+      return await withUnreadCountHeader(
+        NextResponse.json(result.body, { status: result.status }),
+        config.userId,
+      );
     }
 
     // Path 2 — header present.
@@ -101,7 +111,10 @@ export async function withIdempotencyRoute(
           );
         }
         // Cached replay — handler NOT executed.
-        return NextResponse.json(row.response, { status: row.statusCode });
+        return await withUnreadCountHeader(
+          NextResponse.json(row.response, { status: row.statusCode }),
+          config.userId,
+        );
       }
 
       // First-time: execute handler fully, then INSERT the complete row.
@@ -118,7 +131,10 @@ export async function withIdempotencyRoute(
         expiresAt,
       });
 
-      return NextResponse.json(result.body, { status: result.status });
+      return await withUnreadCountHeader(
+        NextResponse.json(result.body, { status: result.status }),
+        config.userId,
+      );
     });
   } catch (err) {
     return apiError(err);
