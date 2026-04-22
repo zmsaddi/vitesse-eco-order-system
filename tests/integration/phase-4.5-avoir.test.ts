@@ -286,8 +286,15 @@ describe.skipIf(!HAS_DB)("Phase 4.5 — Avoir core (requires TEST_DATABASE_URL)"
     name: "SK",
   });
 
+  type OrderItemInput = {
+    productId: number;
+    quantity: number;
+    unitPrice: number;
+    isGift?: boolean;
+  };
+
   async function createConfirmedInvoice(
-    itemCount: number,
+    itemCountOrItems: number | OrderItemInput[],
     tag: string,
   ): Promise<{
     orderId: number;
@@ -295,13 +302,21 @@ describe.skipIf(!HAS_DB)("Phase 4.5 — Avoir core (requires TEST_DATABASE_URL)"
     invoiceId: number;
     invoiceLineIds: number[];
   }> {
-    // Separate line items so the invoice has `itemCount` lines — matches
-    // D-29 uniqueness semantics (seller bonus per (delivery, order_item)).
-    const items = Array.from({ length: itemCount }, () => ({
-      productId,
-      quantity: 1,
-      unitPrice: 100,
-    }));
+    // Separate line items so the invoice has N lines — matches D-29
+    // uniqueness semantics (seller bonus per (delivery, order_item)).
+    // Default path (number) creates N paid lines at 100€ each. Callers that
+    // need gift lines or mixed items pass an explicit items[] array.
+    const items: OrderItemInput[] = Array.isArray(itemCountOrItems)
+      ? itemCountOrItems
+      : Array.from({ length: itemCountOrItems }, () => ({
+          productId,
+          quantity: 1,
+          unitPrice: 100,
+        }));
+    const orderTotal = items.reduce(
+      (sum, it) => sum + it.quantity * it.unitPrice,
+      0,
+    );
     const rc = await freshRoutes(seller());
     const create = await rc.orders.POST(
       new Request("http://localhost/api/v1/orders", {
@@ -371,7 +386,7 @@ describe.skipIf(!HAS_DB)("Phase 4.5 — Avoir core (requires TEST_DATABASE_URL)"
             "Idempotency-Key": `45-cfm-${delivery.id}-${tag}`,
           },
           body: JSON.stringify({
-            paidAmount: 100 * itemCount,
+            paidAmount: orderTotal,
             paymentMethod: "كاش",
           }),
         },
@@ -967,6 +982,132 @@ describe.skipIf(!HAS_DB)("Phase 4.5 — Avoir core (requires TEST_DATABASE_URL)"
     // Note: the exact "AVOIR" + parentRefCode rendering is verified unit-level
     // in src/modules/invoices/pdf-header.test.ts — deterministic proof path
     // without pdf-text extraction.
+  });
+
+  // ─────────────────── POST-REVIEW FIXES ───────────────────
+
+  it("T-AV-GIFT-ONLY: selecting only gift lines (line_total=0) → 400 INVALID_AVOIR_LINE_SET", async () => {
+    // Mixed order: one paid line + one gift line. Each gift line has
+    // unit_price=0 in orders.dto, which pricing.ts turns into
+    // line_total=0 on the frozen invoice_line. Selecting ONLY the gift
+    // line for refund yields a zero-totalTtc avoir — the service guard
+    // rejects with 400 (NOT 500 — this is caller input, not a server bug).
+    //
+    // orders.service enforces gift_pool membership for any isGift item.
+    // Seed a generous gift_pool entry first so the order POST succeeds.
+    const { withTxInRoute } = await import("@/db/client");
+    const { giftPool } = await import("@/db/schema");
+    await withTxInRoute(undefined, async (tx) => {
+      await tx.insert(giftPool).values({
+        productId,
+        quantity: "100.00",
+        createdBy: "admin",
+      });
+    });
+
+    const base = await createConfirmedInvoice(
+      [
+        { productId, quantity: 1, unitPrice: 100 },
+        { productId, quantity: 1, unitPrice: 0, isGift: true },
+      ],
+      "gift-only",
+    );
+    expect(base.invoiceLineIds.length).toBe(2);
+
+    // Resolve which invoice line is the gift (line_total=0).
+    const { withRead } = await import("@/db/client");
+    const { invoiceLines } = await import("@/db/schema");
+    const lineRows = await withRead(undefined, (db) =>
+      db
+        .select({
+          id: invoiceLines.id,
+          lineTotalTtcFrozen: invoiceLines.lineTotalTtcFrozen,
+          isGift: invoiceLines.isGift,
+        })
+        .from(invoiceLines)
+        .where(eq(invoiceLines.invoiceId, base.invoiceId)),
+    );
+    const giftLine = lineRows.find(
+      (l) => l.isGift === true || Number(l.lineTotalTtcFrozen) === 0,
+    );
+    expect(giftLine).toBeDefined();
+
+    const res = await callIssueAvoir(
+      base.invoiceId,
+      admin(),
+      {
+        reason: "gift-only selection",
+        lines: [{ invoiceLineId: giftLine!.id, quantityToCredit: 1 }],
+      },
+      "gift-only",
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { code: string };
+    expect(body.code).toBe("INVALID_AVOIR_LINE_SET");
+  });
+
+  it("T-AV-CROSS-MONTH: backdated parent (2026-03-15) → avoir.date=TODAY (not parent.date)", async () => {
+    const base = await createConfirmedInvoice(1, "xm-a");
+
+    // Backdate the parent to 2026-03-15. D-58 blocks UPDATE, so we disable
+    // the trigger for the duration of the backdating (pattern reused from
+    // T-AV-NEG-CANCELLED-PARENT), then re-enable.
+    const { withTxInRoute, withRead } = await import("@/db/client");
+    const { invoices } = await import("@/db/schema");
+    const { sql } = await import("drizzle-orm");
+    await withTxInRoute(undefined, async (tx) => {
+      await tx.execute(sql`ALTER TABLE invoices DISABLE TRIGGER invoices_no_update`);
+      await tx
+        .update(invoices)
+        .set({ date: "2026-03-15" })
+        .where(eq(invoices.id, base.invoiceId));
+      await tx.execute(sql`ALTER TABLE invoices ENABLE TRIGGER invoices_no_update`);
+    });
+
+    const res = await callIssueAvoir(
+      base.invoiceId,
+      admin(),
+      {
+        reason: "cross-month reversal",
+        lines: [{ invoiceLineId: base.invoiceLineIds[0], quantityToCredit: 1 }],
+      },
+      "xm",
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      avoir: { id: number; date: string; refCode: string };
+      parentRefCode: string;
+    };
+
+    // Avoir's own `date` field must differ from the (now backdated) parent.
+    expect(body.avoir.date).not.toBe("2026-03-15");
+
+    // Avoir's `date` must match "today" in Paris — the day of issuance.
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Paris",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+    expect(body.avoir.date).toBe(today);
+
+    // Ref-code month must align with the avoir's own date, not the parent's.
+    // Format is FAC-YYYY-MM-NNNN.
+    const [, avoirYear, avoirMonth] = body.avoir.refCode.split("-");
+    const [todayYear, todayMonth] = today.split("-");
+    expect(avoirYear).toBe(todayYear);
+    expect(avoirMonth).toBe(todayMonth);
+
+    // Double-check: the DB row persisted the issuance date (not parent date).
+    const persisted = await withRead(undefined, (db) =>
+      db
+        .select({ date: invoices.date, refCode: invoices.refCode })
+        .from(invoices)
+        .where(eq(invoices.id, body.avoir.id))
+        .limit(1),
+    );
+    expect(persisted[0].date).toBe(today);
+    expect(persisted[0].date).not.toBe("2026-03-15");
   });
 
   // Touches `freshRoutes` to silence "declared but unused" when iterating.

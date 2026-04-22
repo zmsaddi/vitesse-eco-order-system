@@ -5,6 +5,46 @@
 
 ---
 
+## §0 Post-Review Amendment (2026-04-22)
+
+Reviewer flagged three defects on commit `1cab312` before approving Phase 4.5 closure. All three fixed in follow-up commit, with two additional regression tests.
+
+### Defect 1 (HIGH) — Avoir back-dated to parent
+[`src/modules/invoices/avoir/issue.ts:187`](../../src/modules/invoices/avoir/issue.ts#L187) (pre-fix) read `const avoirDate = parent.date;`. That produced rows like `refCode=FAC-2026-05-0001` with `date=2026-04-15` whenever the avoir was issued in a month later than the parent, breaking chronology + list ordering + violating the French credit-note convention ("date du document = date d'émission; referencing the original invoice is a separate line, not a date override"). **Fix**: `avoirDate = parisIsoDate(new Date())`. Parent reference is preserved via the existing `avoirOfId` FK + the `avoirParent.{refCode,date}` payload rendered as a sub-line in the PDF.
+
+### Defect 2 (MEDIUM) — 500 on zero-impact selection
+[`src/modules/invoices/avoir/issue.ts:221-228`](../../src/modules/invoices/avoir/issue.ts#L221) (pre-fix) threw `INVALID_AVOIR_LINE_SET` with **HTTP 500** when the computed `totalTtc` was ≥ 0 (reachable by selecting only gift lines, whose `line_total_ttc_frozen=0`). [`docs/requirements-analysis/31_Error_Handling.md:141`](../requirements-analysis/31_Error_Handling.md#L141) documents the same code as 400. The integration suite only exercised happy-path lines at 100€ and missed the branch. **Fix**: HTTP changed to 400 + error message now names the likely cause explicitly ("اختيار سطور هدية فقط"). The guard is no longer labelled "defence-in-depth" — it's a first-class caller-input validation.
+
+### Defect 3 (LOW) — Doc drift inside 22_Print_Export.md
+[`22_Print_Export.md:32`](../requirements-analysis/22_Print_Export.md#L32) (pre-fix) still carried the pre-4.5 one-liner `Avoir relatif à la facture N° {FAC-original}`, while [`22_Print_Export.md:85`](../requirements-analysis/22_Print_Export.md#L85) carried the fully-specified 4.5 wording. **Fix**: line 32 rewritten to reference the 4.5 wording + link down to the detailed sub-section. Single source of truth within the file.
+
+### New regression tests (+2)
+
+- **T-AV-GIFT-ONLY** — seeds a gift_pool entry for the product, creates an invoice with one paid line + one gift line, issues an avoir selecting ONLY the gift line. Asserts HTTP **400** + code `INVALID_AVOIR_LINE_SET`. Closes Defect 2's coverage gap.
+- **T-AV-CROSS-MONTH** — disables the D-58 trigger, backdates the parent to `2026-03-15`, re-enables the trigger, issues an avoir, and asserts:
+  - `avoir.date !== "2026-03-15"` (not parent's date)
+  - `avoir.date === paris today`
+  - the ref-code's YYYY-MM matches today (not parent)
+  - persisted DB row carries the today-date
+  Closes Defect 1's coverage gap.
+
+### Gate results after amendments
+
+| Gate | Result |
+|---|:-:|
+| Lint | ✅ |
+| Typecheck | ✅ |
+| Build | ✅ |
+| db:migrate:check | ✅ |
+| Unit | **228/228** (unchanged; 4 pdf-header tests) |
+| Integration | **299/299** on live Neon (276 pre-4.5 baseline + 21 initial 4.5 + **2** new = 23 Phase-4.5 cases total) |
+
+Amendments ride on the same Phase 4.5 tranche — no new phase number; the original commit `1cab312` is corrected forward by this follow-up.
+
+---
+
+---
+
 ## 0. Implementation Contract (accepted 2026-04-21 with 3 mandatory amendments)
 
 **Scope delivered**: `POST /api/v1/invoices/[id]/avoir` with discriminated-union validation, FOR UPDATE locking on parent + existing avoir children, running-total enforcement, hash chain + D-58 integration, conditional PDF header, and 21 integration + 4 unit tests.

@@ -12,6 +12,7 @@ import {
   HASH_CHAIN_KEYS,
 } from "@/lib/hash-chain";
 import { round2 } from "@/lib/money";
+import { parisIsoDate } from "@/modules/treasury/accounts";
 import { validateD35Readiness } from "../d35-gate";
 import {
   invoiceLineRowToDto,
@@ -183,7 +184,15 @@ export async function performIssueAvoir(
   }
 
   // 7. Compute avoir line values (signed negative) and aggregate totals.
-  const avoirDate = parent.date; // same booking period as the parent
+  //
+  // The avoir is an independent document whose `date` is the day it is
+  // issued — NOT the parent's issue date. Back-dating to `parent.date`
+  // would break chronology (the monthly ref-code counter is keyed off
+  // "today", so a 2026-05 ref-code carrying a 2026-04 date is both
+  // visually confusing for list-ordering and legally inconsistent with
+  // the French credit-note convention of "date de document = date
+  // d'émission, reference to original invoice in a separate line").
+  const avoirDate = parisIsoDate(new Date());
   const avoirLines = plan.map(({ parentLine, quantityToCredit }) => {
     const parentQty = Number(parentLine.quantity);
     const parentLineTotalTtc = Number(parentLine.lineTotalTtcFrozen);
@@ -218,11 +227,16 @@ export async function performIssueAvoir(
   const totalHt = round2(totalTtc - totalVat);
 
   if (totalTtc >= 0) {
+    // Reachable via caller input (e.g. selecting only gift lines whose
+    // line_total_ttc_frozen is 0 → avoir totalTtc sums to 0). This is a
+    // client-side error — the caller must pick at least one line with
+    // non-zero line_total — so it's 400, matching the `INVALID_AVOIR_LINE_SET`
+    // HTTP contract published in 31_Error_Handling.md.
     throw new BusinessRuleError(
-      "مجموع الـ Avoir يجب أن يكون سالباً.",
+      "مجموع الـ Avoir يجب أن يكون سالباً — اختيار السطور لا ينتج قيمة قابلة للاسترداد (مثلاً اختيار سطور هدية فقط).",
       "INVALID_AVOIR_LINE_SET",
-      500,
-      "performIssueAvoir: computed totalTtc is non-negative (defence)",
+      400,
+      "performIssueAvoir: computed totalTtc is non-negative (gift-only / zero-impact selection)",
       { totalTtc },
     );
   }

@@ -29,7 +29,7 @@
    - `En cas de retard: pénalités = {shop_penalty_rate_annual}% annuel (taux légal BCE + 10 pts min.)`
    - `Indemnité forfaitaire de recouvrement: {shop_recovery_fee_eur} € (C. com L441-10 II)`
 7. **Bank block**: IBAN + BIC (من settings — **يُرفَض توليد فاتورة إذا كانا placeholder**).
-8. **Avoir reference (D-38)**: إذا `avoir_of_id IS NOT NULL` → سطر `Avoir relatif à la facture N° {FAC-original}`.
+8. **Avoir reference (D-38 + Phase 4.5)**: إذا `avoir_of_id IS NOT NULL` → (أ) العنوان "AVOIR" bold بدل "FACTURE"، (ب) سطر `Avoir de la facture {parentRefCode} du {parentDate}` (fontSize 9، تحت العنوان، قبل N°/date/payment method). راجع القسم الفرعي "Avoir PDF" أدناه للتفاصيل الكاملة.
 9. **Stamp**: `/public/stamp.png` (max 200×200، aspect-preserved).
 10. **Footer**: SIRET | SIREN | APE | `RCS Poitiers N° {shop_rcs_number}` | ref | contact + timestamp توليد.
 
