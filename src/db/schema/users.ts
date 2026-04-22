@@ -65,15 +65,28 @@ export const permissions = pgTable(
 );
 
 // Table 29: notification_preferences (in_app only — D-22)
-export const notificationPreferences = pgTable("notification_preferences", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "restrict" }), // D-27
-  notificationType: text("notification_type").notNull(),
-  channel: text("channel").notNull().default("in_app"),
-  enabled: boolean("enabled").notNull().default(true),
-});
+// UNIQUE(user_id, notification_type, channel) per 26_Notifications.md §"جدول
+// notification_preferences". Drives ON CONFLICT DO NOTHING in lazy-seed so
+// concurrent first-time GETs cannot produce duplicate rows (added 0012).
+export const notificationPreferences = pgTable(
+  "notification_preferences",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }), // D-27
+    notificationType: text("notification_type").notNull(),
+    channel: text("channel").notNull().default("in_app"),
+    enabled: boolean("enabled").notNull().default(true),
+  },
+  (t) => [
+    unique("notification_preferences_user_type_channel_unique").on(
+      t.userId,
+      t.notificationType,
+      t.channel,
+    ),
+  ],
+);
 
 // Table 28: notifications
 export const notifications = pgTable("notifications", {

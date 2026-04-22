@@ -738,7 +738,7 @@ describe.skipIf(!HAS_DB)(
       );
     });
 
-    it("T-EMIT-DELIVERY-CONFIRMED + PAYMENT-RECEIVED: pm/gm + seller + pm/gm on paid", async () => {
+    it("T-EMIT-DELIVERY-CONFIRMED + PAYMENT-RECEIVED: pm/gm/manager + seller on delivery, pm/gm/manager on paid", async () => {
       const orderId = await createOrder(
         seller(),
         [{ productId, quantity: 1, unitPrice: 100 }],
@@ -746,24 +746,45 @@ describe.skipIf(!HAS_DB)(
       );
       await transitionOrder(orderId, "emit-conf");
       const deliveryId = await createDelivery(orderId, driverId);
-      const confBefore = await countNotificationsFor(
+      const confSellerBefore = await countNotificationsFor(
         sellerId,
         "DELIVERY_CONFIRMED",
       );
-      const payBefore = await countNotificationsFor(
+      const confAdminBefore = await countNotificationsFor(
         adminUserId,
+        "DELIVERY_CONFIRMED",
+      );
+      const confManagerBefore = await countNotificationsFor(
+        managerId,
+        "DELIVERY_CONFIRMED",
+      );
+      const payAdminBefore = await countNotificationsFor(
+        adminUserId,
+        "PAYMENT_RECEIVED",
+      );
+      const payManagerBefore = await countNotificationsFor(
+        managerId,
         "PAYMENT_RECEIVED",
       );
       await startAndConfirmDelivery(deliveryId, 100, "emit-conf");
       expect(
         await countNotificationsFor(sellerId, "DELIVERY_CONFIRMED"),
-      ).toBe(confBefore + 1);
+      ).toBe(confSellerBefore + 1);
+      expect(
+        await countNotificationsFor(adminUserId, "DELIVERY_CONFIRMED"),
+      ).toBe(confAdminBefore + 1);
+      expect(
+        await countNotificationsFor(managerId, "DELIVERY_CONFIRMED"),
+      ).toBe(confManagerBefore + 1);
       expect(
         await countNotificationsFor(adminUserId, "PAYMENT_RECEIVED"),
-      ).toBe(payBefore + 1);
+      ).toBe(payAdminBefore + 1);
+      expect(
+        await countNotificationsFor(managerId, "PAYMENT_RECEIVED"),
+      ).toBe(payManagerBefore + 1);
     });
 
-    it("T-EMIT-LOW-STOCK: decrement past threshold fires LOW_STOCK to pm/gm/stock_keeper", async () => {
+    it("T-EMIT-LOW-STOCK: decrement past threshold fires LOW_STOCK to pm/gm/manager/stock_keeper", async () => {
       // Drain stock down to just above threshold first, then order enough to cross.
       const { withTxInRoute } = await import("@/db/client");
       const { products } = await import("@/db/schema");
@@ -773,14 +794,25 @@ describe.skipIf(!HAS_DB)(
           .set({ stock: "5.00", lowStockThreshold: 3 })
           .where(eq(products.id, productId));
       });
-      const before = await countNotificationsFor(adminUserId, "LOW_STOCK");
+      const adminBefore = await countNotificationsFor(adminUserId, "LOW_STOCK");
+      const managerBefore = await countNotificationsFor(managerId, "LOW_STOCK");
+      const stockKeeperBefore = await countNotificationsFor(
+        stockKeeperId,
+        "LOW_STOCK",
+      );
       await createOrder(
         seller(),
         [{ productId, quantity: 3, unitPrice: 100 }], // 5 → 2, crosses threshold=3
         "emit-low",
       );
       expect(await countNotificationsFor(adminUserId, "LOW_STOCK")).toBe(
-        before + 1,
+        adminBefore + 1,
+      );
+      expect(await countNotificationsFor(managerId, "LOW_STOCK")).toBe(
+        managerBefore + 1,
+      );
+      expect(await countNotificationsFor(stockKeeperId, "LOW_STOCK")).toBe(
+        stockKeeperBefore + 1,
       );
     });
 
@@ -847,7 +879,7 @@ describe.skipIf(!HAS_DB)(
       ).toBe(before + 1);
     });
 
-    it("T-EMIT-ORDER-CANCELLED: pm/gm + seller + linked driver all receive", async () => {
+    it("T-EMIT-ORDER-CANCELLED: pm/gm/manager + seller + linked driver all receive", async () => {
       const orderId = await createOrder(
         seller(),
         [{ productId, quantity: 1, unitPrice: 100 }],
@@ -859,6 +891,10 @@ describe.skipIf(!HAS_DB)(
 
       const adminBefore = await countNotificationsFor(
         adminUserId,
+        "ORDER_CANCELLED",
+      );
+      const managerBefore = await countNotificationsFor(
+        managerId,
         "ORDER_CANCELLED",
       );
       const sellerBefore = await countNotificationsFor(
@@ -891,6 +927,9 @@ describe.skipIf(!HAS_DB)(
       expect(
         await countNotificationsFor(adminUserId, "ORDER_CANCELLED"),
       ).toBe(adminBefore + 1);
+      expect(await countNotificationsFor(managerId, "ORDER_CANCELLED")).toBe(
+        managerBefore + 1,
+      );
       expect(await countNotificationsFor(sellerId, "ORDER_CANCELLED")).toBe(
         sellerBefore + 1,
       );
@@ -933,6 +972,123 @@ describe.skipIf(!HAS_DB)(
       expect(
         await countNotificationsFor(managerId, "DRIVER_HANDOVER_DONE"),
       ).toBe(before + 1);
+    });
+
+    // ───────── hardening — preferences concurrency + audience constraints ─────────
+
+    it("T-NTF-PREFS-LAZY-SEED-CONCURRENT: two parallel first-time GETs produce 14 rows, not duplicates", async () => {
+      const { withRead, withTxInRoute } = await import("@/db/client");
+      const { users, notificationPreferences } = await import("@/db/schema");
+      const { hashPassword } = await import("@/lib/password");
+
+      // Fresh user — never opened preferences, zero rows in DB.
+      const hash = await hashPassword("conc-51a");
+      const u = await withTxInRoute(undefined, async (tx) =>
+        tx
+          .insert(users)
+          .values({
+            username: "prefs-conc-51a",
+            password: hash,
+            name: "Prefs Conc",
+            role: "seller",
+            active: true,
+          })
+          .returning({ id: users.id }),
+      );
+      const uid = u[0].id;
+
+      // Fire two identical first-time GETs concurrently. With ON CONFLICT
+      // DO NOTHING + UNIQUE(user_id, notification_type, channel), the second
+      // tx's INSERT lands as a no-op on every row; the first produces 14.
+      const userStub = {
+        id: uid,
+        username: "prefs-conc-51a",
+        role: "seller",
+        name: "Prefs Conc",
+      };
+      const r1 = await freshRoutes(userStub);
+      const r2 = await freshRoutes(userStub);
+      const [a, b] = await Promise.all([
+        r1.notificationsPrefs.GET(
+          new Request("http://localhost/api/v1/notifications/preferences"),
+        ),
+        r2.notificationsPrefs.GET(
+          new Request("http://localhost/api/v1/notifications/preferences"),
+        ),
+      ]);
+      expect(a.status).toBe(200);
+      expect(b.status).toBe(200);
+
+      const rows = await withRead(undefined, (db) =>
+        db
+          .select()
+          .from(notificationPreferences)
+          .where(eq(notificationPreferences.userId, uid)),
+      );
+      expect(rows.length).toBe(14);
+    });
+
+    it("T-EMIT-SETTLEMENT-REWARD-REJECTS-MANAGER: POST reward for manager target → 400 REWARD_ROLE_NOT_ALLOWED", async () => {
+      const { withRead } = await import("@/db/client");
+      const { notifications } = await import("@/db/schema");
+
+      const r = await freshRoutes(admin());
+      const res = await r.settlements.POST(
+        new Request("http://localhost/api/v1/settlements", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "Idempotency-Key": "51a-reward-reject-manager",
+          },
+          body: JSON.stringify({
+            kind: "reward",
+            userId: managerId,
+            amount: 50,
+            fromAccountId: mainCashId,
+            paymentMethod: "كاش",
+          }),
+        }),
+      );
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { code: string };
+      expect(body.code).toBe("REWARD_ROLE_NOT_ALLOWED");
+
+      const rows = await withRead(undefined, (db) =>
+        db
+          .select()
+          .from(notifications)
+          .where(
+            and(
+              eq(notifications.userId, managerId),
+              eq(notifications.type, "SETTLEMENT_ISSUED"),
+            ),
+          ),
+      );
+      expect(rows.length).toBe(0);
+    });
+
+    it("T-EMIT-SETTLEMENT-PREDICATE-GUARDS-NON-SELLER-DRIVER: synthetic emit for a manager target drops silently at the predicate", async () => {
+      // Defence-in-depth: even if a caller slipped past the business rule,
+      // the INSERT ... SELECT WHERE role IN ('seller','driver') predicate
+      // produces zero rows for a manager target.
+      const { withTxInRoute } = await import("@/db/client");
+      const { emitNotifications } = await import(
+        "@/modules/notifications/events"
+      );
+      const before = await countNotificationsFor(managerId, "SETTLEMENT_ISSUED");
+      await withTxInRoute(undefined, async (tx) => {
+        const ids = await emitNotifications(tx, {
+          type: "SETTLEMENT_ISSUED",
+          settlementId: 9_999_999,
+          targetUserId: managerId,
+          kind: "reward",
+          amount: "1.00",
+        });
+        expect(ids).toEqual([]);
+      });
+      expect(
+        await countNotificationsFor(managerId, "SETTLEMENT_ISSUED"),
+      ).toBe(before);
     });
 
     // Silence unused-binding warnings when iterating.

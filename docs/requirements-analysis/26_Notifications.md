@@ -3,6 +3,7 @@
 > **رقم العنصر**: #26 | **المحور**: هـ | **الحالة**: مواصفات نهائية
 > **Phase 5.1a — API + emitters shipped** (2026-04-22). UI (bell + `/notifications` + `/settings/notifications`) يُشحن في Phase 5.1b.
 > **Emission coverage**: 11 من 14 حدثًا موصَّلة بمصدر حيّ في 5.1a. الثلاثة المتبقية — `GIFT_POOL_FILLED` + `OVERDUE_PAYMENT` + `RECONCILIATION_REMINDER` — routing + preference row + UI toggle تُشحن في 5.1a، لكن مواقع الإصدار الفعلية تنتظر infrastructure لم يُشحن بعد (endpoint تعبئة gift_pool للأول؛ cron يومي للآخريْن). موثَّق صراحة في `phase-5.1a-delivery-report.md` §Known Gaps، ليس silent omission.
+> **5.1a review-hardening (2026-04-22)**: (1) migration `0012_notification_preferences_unique` أضاف UNIQUE(user_id, notification_type, channel) — الـschema كانت تحمل العمود بلا القيد، والـlazy-seed الآن يستخدم ON CONFLICT DO NOTHING ضد هذا الـtarget فتُلغَى سباقات أول GET. (2) manager مُدرَج فعلياً في routing `DELIVERY_CONFIRMED` + `PAYMENT_RECEIVED` + `LOW_STOCK` + `ORDER_CANCELLED` (المصفوفة أسفله كانت صحيحة؛ الكود كان ينقصها). (3) `SETTLEMENT_ISSUED` مقصور على seller/driver: `reward.ts` يرفض أي role آخر بـ`REWARD_ROLE_NOT_ALLOWED` (400)، وpredicate الـemitter يحمل `AND role IN ('seller','driver')` كـdefense-in-depth — `/my-bonus` هدفه seller/driver-only.
 
 ---
 

@@ -72,6 +72,20 @@ export async function performRewardPayout(
   if (!user || !user.active) {
     throw new NotFoundError(`المستخدم رقم ${input.userId}`);
   }
+  // 26_Notifications.md matrix restricts تسوية/مكافأة to seller + driver
+  // only, and /my-bonus (the notification click target + the only UI that
+  // surfaces settlements+rewards) is seller/driver-only. Reject at the
+  // business layer so the matrix is enforced, not just conventionally
+  // honored by current callers.
+  if (user.role !== "seller" && user.role !== "driver") {
+    throw new BusinessRuleError(
+      "المكافأة مقيَّدة بـseller أو driver فقط.",
+      "REWARD_ROLE_NOT_ALLOWED",
+      400,
+      "performRewardPayout: non-seller/driver target role",
+      { targetUserId: user.id, role: user.role },
+    );
+  }
 
   const source = await lockAccountForUpdate(tx, input.fromAccountId);
   if (!source) {

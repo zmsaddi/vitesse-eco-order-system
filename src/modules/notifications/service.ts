@@ -145,32 +145,32 @@ export async function markAllRead(
 
 /**
  * List preferences — lazy-seeds 14 rows on first call (one per known type).
- * Seeding happens in the same tx as the read so re-reads never double-seed.
+ * Idempotent under concurrency: the insert targets the
+ * notification_preferences_user_type_channel_unique constraint with
+ * ON CONFLICT DO NOTHING, so two concurrent first-time GETs for the same
+ * user both see a complete set afterwards without producing duplicates.
  */
 export async function listPreferences(
   tx: DbTx,
   claims: NotificationClaims,
 ): Promise<NotificationPreferenceDto[]> {
-  const existing = await tx
-    .select()
-    .from(notificationPreferences)
-    .where(eq(notificationPreferences.userId, claims.userId));
+  const seedRows = NOTIFICATION_TYPES.map((t) => ({
+    userId: claims.userId,
+    notificationType: t as NotificationType,
+    channel: "in_app" as const,
+    enabled: true,
+  }));
+  await tx
+    .insert(notificationPreferences)
+    .values(seedRows)
+    .onConflictDoNothing({
+      target: [
+        notificationPreferences.userId,
+        notificationPreferences.notificationType,
+        notificationPreferences.channel,
+      ],
+    });
 
-  const existingTypes = new Set(existing.map((r) => r.notificationType));
-  const missing = NOTIFICATION_TYPES.filter((t) => !existingTypes.has(t));
-
-  if (missing.length > 0) {
-    await tx.insert(notificationPreferences).values(
-      missing.map((t) => ({
-        userId: claims.userId,
-        notificationType: t as NotificationType,
-        channel: "in_app" as const,
-        enabled: true,
-      })),
-    );
-  }
-
-  // Re-fetch to include freshly inserted rows.
   const full = await tx
     .select()
     .from(notificationPreferences)

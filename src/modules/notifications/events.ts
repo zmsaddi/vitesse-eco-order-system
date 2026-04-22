@@ -90,6 +90,13 @@ type EmitPayload =
 // Routing predicate per 26_Notifications.md lines 28–43. SQL fragment is
 // embedded directly into the INSERT SELECT, so user_id resolution happens in
 // one shot alongside the preference filter.
+//
+// SETTLEMENT_ISSUED is additionally restricted to seller/driver here as
+// defence-in-depth: the matrix line marks settlements as seller/driver-only
+// and /my-bonus (the click target) is seller/driver-only. Callers already
+// assert the role at the business layer; this predicate makes any future
+// slip at the call site silently drop the notification instead of pushing
+// an unreachable link to a pm/gm/manager inbox.
 function buildRecipientPredicate(payload: EmitPayload): SQL {
   switch (payload.type) {
     case "ORDER_CREATED":
@@ -97,17 +104,17 @@ function buildRecipientPredicate(payload: EmitPayload): SQL {
     case "ORDER_STARTED_PREPARATION":
       return sql`role = 'stock_keeper'`;
     case "LOW_STOCK":
-      return sql`role IN ('pm','gm','stock_keeper')`;
+      return sql`role IN ('pm','gm','manager','stock_keeper')`;
     case "PAYMENT_RECEIVED":
-      return sql`role IN ('pm','gm')`;
+      return sql`role IN ('pm','gm','manager')`;
     case "DELIVERY_CONFIRMED":
-      return sql`role IN ('pm','gm') OR username = ${payload.orderSellerUsername}`;
+      return sql`role IN ('pm','gm','manager') OR username = ${payload.orderSellerUsername}`;
     case "ORDER_CANCELLED": {
       const driverClause =
         payload.linkedDriverId != null
           ? sql` OR id = ${payload.linkedDriverId}`
           : sql``;
-      return sql`role IN ('pm','gm') OR username = ${payload.orderSellerUsername}${driverClause}`;
+      return sql`role IN ('pm','gm','manager') OR username = ${payload.orderSellerUsername}${driverClause}`;
     }
     case "ORDER_READY_FOR_DELIVERY":
     case "NEW_TASK":
@@ -115,7 +122,7 @@ function buildRecipientPredicate(payload: EmitPayload): SQL {
     case "BONUS_CREATED":
       return sql`id = ${payload.bonusUserId}`;
     case "SETTLEMENT_ISSUED":
-      return sql`id = ${payload.targetUserId}`;
+      return sql`id = ${payload.targetUserId} AND role IN ('seller','driver')`;
     case "DRIVER_HANDOVER_DONE":
       return sql`id = ${payload.managerUserId}`;
   }

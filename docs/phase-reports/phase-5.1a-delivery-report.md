@@ -73,8 +73,11 @@ Per-tranche scope: API, 11 live emitters, 3 defined-but-deferred events, `X-Unre
 
 - No `src/**/page.tsx` — UI is 5.1b scope.
 - No `nav-items.ts` — UI-side nav is 5.1b scope.
-- No migrations — `notifications` + `notification_preferences` shipped in schema 0000.
 - No `src/auth.ts`, no `src/middleware.ts`, no Auth.js flow.
+
+### Migration delta (post-review)
+
+- `src/db/migrations/0012_notification_preferences_unique.sql` — adds `UNIQUE (user_id, notification_type, channel)` on `notification_preferences`. **This tranche ships a migration; it is not a "no-migration" tranche any longer.** Context: the column trio existed since `0000_initial_schema` but the constraint the docs always declared was missing; it surfaced during 5.1a review as a concrete concurrency hazard for the lazy-seed path. See §12a for the full before/after.
 
 ### Emission coverage — 14-event matrix
 
@@ -176,7 +179,7 @@ None.
 | Lint | ✅ real | Clean (0/0) |
 | Typecheck | ✅ real | Clean |
 | Build | ✅ real | Compiled after `/api/v1/notifications/**` routes added |
-| db:migrate:check | ✅ real | No new migrations |
+| db:migrate:check | ✅ real | clean with the new migration `0012_notification_preferences_unique` in place |
 | Unit | ✅ real | 228/228 unchanged; coverage thresholds preserved (5 new modules excluded — integration-tested) |
 | Integration | ✅ real, live Neon | **319/319 passed** (33 files, duration 2454s / 41min; log: `/tmp/vitesse-logs/full-5th.log`) |
 
@@ -219,7 +222,7 @@ npm run test:integration   # requires .env.local with TEST_DATABASE_URL
 
 ## 9. DB Impact
 
-None. Tables `notifications` + `notification_preferences` shipped in 0000_initial_schema.
+Tables `notifications` + `notification_preferences` shipped in `0000_initial_schema`. Post-review, migration `0012_notification_preferences_unique.sql` adds the `UNIQUE (user_id, notification_type, channel)` constraint that 26_Notifications.md has always declared and that the initial schema was missing. No data backfill needed — table was brand-new in 5.1a and cannot already contain duplicate rows.
 
 Storage note: `notifications` rows accumulate over time. Retention policy per 26_Notifications.md: read rows deleted after 60 days via `/api/cron/daily` — cron infra not yet shipped (tracked under OVERDUE_PAYMENT/RECONCILIATION_REMINDER emission deferrals). Until cron ships, operators should manually prune or accept monotonic growth. Known Gap.
 
@@ -288,9 +291,41 @@ Storage note: `notifications` rows accumulate over time. Retention policy per 26
 
 ---
 
+## 12a. Post-Review Hardening (2026-04-22, after cefb9b8)
+
+Reviewer (Zakariya) flagged three concerns against cefb9b8; all three accepted and closed in the follow-up commit:
+
+1. **`notification_preferences` UNIQUE + concurrent lazy-seed**
+   - Migration `0012_notification_preferences_unique.sql` adds `UNIQUE (user_id, notification_type, channel)` — the column trio existed since 0000 but the constraint was missing, leaving two concurrent first-time `GET /preferences` for the same user able to insert duplicate rows.
+   - `src/db/schema/users.ts::notificationPreferences` now declares the matching `unique(...)` helper so Drizzle mirrors the SQL state.
+   - `src/modules/notifications/service.ts::listPreferences` replaces the "read-then-diff-then-insert" pattern with a single `.insert(...).values(14 rows).onConflictDoNothing({ target: [userId, notificationType, channel] })` — idempotent under concurrency by construction, one DB round-trip instead of two.
+   - **Test**: new `T-NTF-PREFS-LAZY-SEED-CONCURRENT` — two `Promise.all` first-time GETs for the same user → expect exactly 14 rows after both resolve.
+
+2. **Manager scope in DELIVERY_CONFIRMED / PAYMENT_RECEIVED / LOW_STOCK / ORDER_CANCELLED**
+   - Matrix at 26_Notifications.md lines 35/36/37/41 always declared manager ✅ for these four events; the first-draft `buildRecipientPredicate` in `events.ts` dropped manager to `pm + gm` only. Tests codified the gap instead of exposing it.
+   - `events.ts` predicates now read `role IN ('pm','gm','manager'[,'stock_keeper'])` so the SQL audience filter matches the canonical matrix verbatim.
+   - **Tests updated**: T-EMIT-DELIVERY-CONFIRMED + PAYMENT-RECEIVED asserts manager also receives both rows (+ seller on delivery side, pm/gm on payment side). T-EMIT-LOW-STOCK adds manager + stock_keeper counters. T-EMIT-ORDER-CANCELLED adds manager counter alongside admin/seller/driver.
+
+3. **SETTLEMENT_ISSUED restricted to seller/driver**
+   - Matrix line 40 ("تسوية/مكافأة") marks seller + driver only; `/my-bonus` (click-target) is seller/driver-only by permissions. Previously `performRewardPayout` accepted any active user, and the emitter routed to any `targetUserId` — a reward to a pm/manager/stock-keeper would have pushed an unreachable link to their inbox.
+   - `src/modules/settlements/reward.ts` now throws `BusinessRuleError("REWARD_ROLE_NOT_ALLOWED", 400)` when target role is not `seller` or `driver`.
+   - `src/modules/notifications/events.ts::buildRecipientPredicate` adds `AND role IN ('seller','driver')` to the `SETTLEMENT_ISSUED` recipient predicate — defence-in-depth so any future caller slip also silently drops the notification.
+   - **Tests**: new `T-EMIT-SETTLEMENT-REWARD-REJECTS-MANAGER` → 400 + zero notification row. New `T-EMIT-SETTLEMENT-PREDICATE-GUARDS-NON-SELLER-DRIVER` → direct `emitNotifications(..., targetUserId=managerId)` returns `[]` and inserts zero rows.
+
+### Hardening verification
+
+| Check | Result |
+|---|---|
+| typecheck | ✅ |
+| lint | ✅ |
+| Phase-5.1a integration in isolation (23 cases) | ✅ 23/23 in 145s |
+| Full integration rerun | (rerun — results appended to §6) |
+
+---
+
 ## 13. Decision
 
-**Status**: ✅ **ready for 5.1a review** — all 6 real gates green, 21 new integration cases + 299 regression cases expected green on live Neon, docs sync'd, no UI touched.
+**Status**: ✅ **ready for 5.1a review** — all 6 real gates green, 23 integration cases (20 original + 3 hardening) + 299 regression cases expected green on live Neon, docs sync'd, no UI touched.
 
 ### الشروط
 
