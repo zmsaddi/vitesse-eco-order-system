@@ -1,7 +1,8 @@
 # لوحة التحكم — Dashboard Requirements
 
 > **رقم العنصر**: #25 | **المحور**: هـ | **الحالة**: مواصفات نهائية
-> **Phase 5.3 correction (2026-04-23)**: الـ`dashboard:view` كما كانت تُوصَف سابقاً لكل الأدوار الستة **لم تُنفَّذ** كذلك في MVP. القرار الفعلي المشحون في 5.3: `/dashboard` + `GET /api/v1/dashboard` **مقصوران على pm/gm/manager**. الأدوار التشغيلية (seller/driver/stock_keeper) **لا dashboard مستقل** في MVP — تهبط مباشرة على شاشة المهام (per §Operational Roles أدناه). KPIs الشخصية لهم تظهر كـheader cards على شاشة المهام لاحقاً (polish في 5.5).
+> **Phase 5.3 correction (2026-04-23)**: الـ`dashboard:view` كما كانت تُوصَف سابقاً لكل الأدوار الستة **لم تُنفَّذ** كذلك في MVP. القرار الفعلي المشحون في 5.3: `/dashboard` + `GET /api/v1/dashboard` **مقصوران على pm/gm/manager**. الأدوار التشغيلية (seller/driver/stock_keeper) **لا dashboard مستقل** في MVP — تهبط مباشرة على شاشة المهام (per §Operational Roles أدناه).
+> **Phase 5.5 closure note (2026-04-23)**: المُشحن فعلياً في 5.5 هو dark mode + empty states polish + printable invoice HTML + PWA minimal + CI hardening. **KPIs الشخصية كـheader cards على شاشة المهام للأدوار التشغيلية لم تُشحن** — الـinformation موجودة أصلاً عبر `/my-bonus` (seller/driver). إضافتها كـcards منفصلة تنتمي لـpost-launch polish tranche إن ظهر طلب حقيقي بعد الـMVP.
 > **محتوى `/dashboard` يختلف بحسب الدور** عبر scope (pm/gm = global؛ manager = team — revenue + counts + outstandingDebts + treasury؛ netProfit + cashProfit = null للـmanager — pm/gm-only numbers).
 
 ---

@@ -8,15 +8,17 @@
 
 ## طبيعة هذا الملف
 
-بعد **سبع مراجعات مستقلة** للمواصفات (3 تدقيقية: docs internal consistency + code-vs-docs reality + cross-file contradictions، جولتان مراجعات صدق بعد Phase 0a و Phase 0b، لجنة سبعة خبراء في Phase 0c، ثم مراجعة خارجية للمطوِّر + rebuttal) رُصد ~178 مشكلة داخلية + 11 blocker خارجي + 3 فجوات فاتت المراجعات الداخلية. هذا الملف يحمل **76 قراراً فاصلاً** (D-01..D-76) يحلّ كل blocker مُكتشَف. تطبيق على specs:
+بعد **سبع مراجعات مستقلة** للمواصفات (3 تدقيقية: docs internal consistency + code-vs-docs reality + cross-file contradictions، جولتان مراجعات صدق بعد Phase 0a و Phase 0b، لجنة سبعة خبراء في Phase 0c، ثم مراجعة خارجية للمطوِّر + rebuttal) رُصد ~178 مشكلة داخلية + 11 blocker خارجي + 3 فجوات فاتت المراجعات الداخلية. هذا الملف يحمل **84 قراراً فاصلاً** (D-01..D-84) يحلّ كل blocker مُكتشَف. تطبيق على specs:
 - D-01..D-25 مُطبَّقة على specs بالكامل (Phase 0a).
 - D-26..D-65 مُطبَّقة على specs بالكامل (Phase 0c — 6 جولات مراجعة داخلية).
 - D-66..D-76 مُطبَّقة على specs بالكامل (Phase 0c — المراجعة الخارجية #07).
+- D-77..D-82 مُضافة خلال Phase 4 (Delivery Acceptance Framework + review-hardening).
+- D-83..D-84 مُضافة خلال Phase 5 (Voice deferred post-MVP + PWA minimal scope).
 - **D-33 مُعلَّم SUPERSEDED** بواسطة D-73.
 
 كل قرار يحمل:
 
-- معرِّف فريد (D-01 إلى D-76).
+- معرِّف فريد (D-01 إلى D-84).
 - بيان القرار بصيغة قطعية.
 - السبب/المبرِّر.
 - التاريخ.

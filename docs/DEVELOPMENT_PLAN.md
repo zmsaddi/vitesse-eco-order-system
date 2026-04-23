@@ -1,10 +1,10 @@
 # خطة التطوير — Development Plan
 
-> **آخر تحديث**: 2026-04-22
-> **الحالة**: Phase 0..3 **مغلقة** (Phase 3 closing baseline = `0151b0f`). **Phase 4 مغلقة محليًا** على baseline `fba93e4` (Phase 4.0/4.0.1/4.0.2 + 4.1/4.1.1/4.1.2 + 4.2/4.2.1 + 4.3/4.3.1/4.3.2 + 4.4/4.4.1 + 4.5 كلها committed؛ الـ Closure Pack docs-only في هذه الـ commit). **82 قراراً** (D-01..D-82). **D-77 + D-78 = Delivery Acceptance Framework**: 13-gate CI، 13-section report، T+1h/T+24h monitoring، KPIs (zero tolerance). الإقفال ليس إذناً بنشر إنتاجي — Phase 4 شرط ضروري لـ pilot تشغيلي كامل.
+> **آخر تحديث**: 2026-04-23 (Phase 5 Closure Pack)
+> **الحالة**: Phase 0..3 **مغلقة** (Phase 3 closing baseline = `0151b0f`). **Phase 4 مغلقة محليًا** على baseline `fba93e4`. **Phase 5 مغلقة محليًا** على baseline `96971e8` — السلسلة: 5.1a (`cefb9b8`) → 5.1a hardening (`84ce852`) → 5.1b (`3cc32fc`) → 5.1b canonical-fetch (`ff3c315`) → 5.2 (`f1adf85`) → 5.3 (`b145e15`) → 5.3 D-49 drift fix (`4ed89a6`) → 5.4 voice deferred docs-only (`4436d1d`) → 5.5 polish (`96971e8`). **84 قراراً** (D-01..D-84). **D-77 + D-78 = Delivery Acceptance Framework**: 13-gate CI، 13-section report، T+1h/T+24h monitoring، KPIs (zero tolerance). **D-83 = Voice Deferred Post-MVP** (Phase 5.4 re-evaluation → defer). **D-84 = PWA Minimal Scope** (5.5 hand-rolled SW، لا Workbox، لا offline data sync). Phase 5 closure ليس إذناً بنشر إنتاجي — هو إعلان MVP v1 launch-ready من منظور الكود؛ النشر يمرّ عبر pilot operational checklist.
 > **النوع**: مشروع جديد بالكامل (fresh build)
 > **المواصفات**: [requirements-analysis/](requirements-analysis/)
-> **القرارات الحاكمة**: [requirements-analysis/00_DECISIONS.md](requirements-analysis/00_DECISIONS.md) — **82 قراراً** فاصلاً (D-01..D-82)
+> **القرارات الحاكمة**: [requirements-analysis/00_DECISIONS.md](requirements-analysis/00_DECISIONS.md) — **84 قراراً** فاصلاً (D-01..D-84)
 > **خطة التنفيذ**: [implementation/00_execution_plan.md](implementation/00_execution_plan.md)
 
 ---
@@ -82,17 +82,21 @@ v2 هو نظام إدارة عمليات كامل لشركة **Vitesse Eco SAS**
 9. Role home = Action Hub لـ PM/GM/manager (D-72)، task-first للـ operational (غير مغيَّر).
 10. Basic notifications (in-app، on-demand — D-42).
 
-**مؤجَّل إلى post-MVP (Phases 5..6)**:
-- Voice input → Phase 5 مع re-evaluation أولاً (الاستمرار غير مضمون).
-- **Dashboards الثقيلة (charts + widgets) → Phase 5** (reviewer decision 2026-04-21 — ليست blocker لإغلاق Phase 4).
+**حالة Phase 5 (محدَّث بعد إغلاق 5.5 — 2026-04-23)**:
+- ✅ **Notifications + X-Unread-Count contract** → Phase 5.1a (`cefb9b8` → hardening `84ce852`) + UI 5.1b (`3cc32fc` → canonical-fetch refactor `ff3c315`).
+- ✅ **Activity log explorer UI** (`/activity`) → Phase 5.2 (`f1adf85`). الـDB + hash chain موجودان منذ Phase 3؛ UI read-only مع manager-team scoping.
+- ✅ **Dashboards + Reports** → Phase 5.3 (`b145e15` → D-49 drift fix `4ed89a6`). 6 report slugs مشحونة + dashboard pm/gm/manager فقط.
+- ⏸️ **Voice input (`/api/voice/*` + VoiceButton + VoiceConfirm)** → **deferred post-MVP** بقرار D-83 (`4436d1d`) بعد Phase 5.4 re-evaluation. Schema + spec + SDK + 7 قرارات محفوظة. Re-activation trigger في D-83.
+- ✅ **Polish (dark mode + empty states + printable invoice HTML + PWA minimal + CI hardening)** → Phase 5.5 (`96971e8`).
+
+**مؤجَّل إلى Phase 6 (بعد قبول MVP v1)**:
 - Permissions UI interactive → Phase 6.
-- **Profit Distributions (`/api/v1/distributions` + UI) → Phase 6** (reviewer decision 2026-04-21 — expert-comptable يتولاها حالياً؛ ليست blocker لإغلاق Phase 4).
-- **Activity log explorer UI → Phase 5** (reviewer decision 2026-04-21 — الـDB موجود من Phase 3؛ الـUI ليس blocker لإغلاق Phase 4).
+- **Profit Distributions (`/api/v1/distributions` + UI) → Phase 6** (reviewer decision 2026-04-21 — expert-comptable يتولاها حالياً؛ ليست blocker لإغلاق Phase 4 أو 5).
 - Command Palette (Ctrl+K) → Phase 6 polish.
 - Onboarding modal المطوَّل (D-49) → يُخفَّف إلى tooltip واحد لكل دور في MVP.
 - Cancel advanced mode للـ seller → admin فقط في MVP.
-- **Reports dashboard + charts → Phase 5** (reviewer decision 2026-04-21 — ليست blocker لإغلاق Phase 4).
-- **Notifications expansion (email/SMS channels)** → Phase 5.
+- ✅ **Reports dashboard + charts** → Phase 5.3 shipped (`b145e15`). 6 report slugs؛ CSV export client-side؛ manager team-scoped فيما ينطبق.
+- ❌ **Notifications expansion (email/SMS channels)** — لم يُشحن ولن يُشحن. D-22 يحصر MVP على `in_app` only؛ لا SMTP ولا Web Push في الـstack. تغيير هذا يتطلَّب decision record جديد.
 
 **السبب**: تقييم المطوِّر الخارجي (تقرير #07 — 64/100) كشف أن النطاق السابق (7 مراحل كاملة) واسع جداً. MVP ضيق = إطلاق أسرع + تعلُّم حقيقي قبل التوسع.
 
@@ -451,7 +455,9 @@ No production deployment without T+1h and T+24h monitoring reports.
 
 ### Phase 5 — Notifications + Activity + Dashboards/Reports + Voice (re-eval) + Polish — **XL (8-12 يوم)**
 
-**الهدف (الترتيب الكنسي المعتمَد 2026-04-22)**: (1) notifications → (2) activity explorer → (3) dashboards + reports → (4) voice (re-eval أولاً، وإن اعتُمد تنفيذ كامل) → (5) polish.
+> **Status: CLOSED (2026-04-23) على baseline `96971e8`.** الترانش الست المشحونة (مع commit SHAs) مُفصَّلة في بنود "الحالة" أعلاه. ما تبقى من هذا القسم = التخطيط الأصلي محفوظاً للرجوع التاريخي.
+
+**الترتيب الكنسي المُنفَّذ**: (1) notifications → (2) activity explorer → (3) dashboards + reports → (4) voice (re-evaluation → **deferred** per D-83) → (5) polish.
 
 **خارج نطاق Phase 5 (مؤكَّد — كلها Phase 6)**: Permissions UI، `/distributions`، Command Palette (Ctrl+K).
 
@@ -548,7 +554,7 @@ No production deployment without T+1h and T+24h monitoring reports.
 | Phase 5 | 8-12 يوم | 10 أسابيع |
 | Phase 6 | 5-7 أيام | 11 أسبوع |
 
-**الهدف الكلي**: ~11 أسبوع (2.5 شهر) إلى production-ready. **Production launch بعد Phase 4** (~8 أسابيع).
+**الهدف الكلي**: ~11 أسبوع (2.5 شهر) إلى production-ready. **Production launch بعد Phase 5** — Phase 4 كانت إغلاقاً وظيفياً لدورة order-to-cash الكاملة؛ Phase 5 أضافت الـoperational polish (notifications + activity + dashboards + reports) + UX polish (dark mode + printable invoice + PWA) قبل الـlaunch. Voice (Phase 5.4) مؤجَّل post-MVP بقرار D-83. Phase 6 (Permissions UI + Distributions + Command Palette) = post-launch feature work.
 
 ---
 
