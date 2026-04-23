@@ -70,7 +70,8 @@ export default defineConfig({
         "src/modules/deliveries/emit-notifications.ts", // Phase 5.1a — thin wrapper; tested via confirm-delivery integration
         "src/lib/unread-count-header.ts",         // Phase 5.1a — in-memory cache + DB count (integration)
         "src/lib/notifications-client.ts",        // Phase 5.1b — browser fetch wrappers (no Node-side consumers; covered by manual UI test)
-        "src/hooks/**",                           // Phase 5.1b — client hooks (zustand + tanstack-query + window.fetch); no JSDOM in vitest setup
+        "src/hooks/useUnreadCount.ts",            // Phase 5.1b — zustand store + window.fetch wrapper; no JSDOM in vitest setup
+        "src/hooks/useNotifications.ts",          // Phase 5.1b — tanstack-query wrappers around notifications-client; no JSDOM
         "src/modules/**/mappers.ts", // Trivial projections — covered via integration
         "src/modules/**/service.ts", // Business logic — covered by integration tests (require DB)
         "src/modules/users/nav.ts",  // Trivial re-export — covered via integration
