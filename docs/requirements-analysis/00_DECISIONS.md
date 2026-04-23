@@ -1017,10 +1017,16 @@ ALTER TABLE users ADD COLUMN onboarded_at TIMESTAMPTZ NULL;
 ```
 - عند `onboarded_at IS NULL` في أول تسجيل دخول: Welcome modal يُعرض مع checklist (3-5 مهام role-specific).
 - Tooltips سياقية (dismissible، يُحفَظ في localStorage).
-- `/dashboard` لـ seller/driver يعرض "دليل سريع" قابل للطي.
+- Welcome modal + tooltips يظهران على الـ **role-home** الخاص بكل دور (ليس على `/dashboard`):
+  - `seller` → `/orders`
+  - `driver` → `/driver-tasks`
+  - `stock_keeper` → `/preparation`
+  - `pm` / `gm` / `manager` → `/action-hub` (D-72) — و `/dashboard` صفحة ثانوية للـ deep analysis فقط (Phase 5.3 shipped كـ pm/gm/manager only؛ الأدوار التشغيلية لا تملك dashboard مستقل في MVP).
 - زر "إكمال الـ onboarding" → `UPDATE users SET onboarded_at=NOW()`.
 
-**التاريخ**: 2026-04-19.
+**Phase 5.3 correction (2026-04-23)**: السطر الأصلي "`/dashboard` لـ seller/driver يعرض 'دليل سريع' قابل للطي" يعكس drift من قبل قرار D-72 (role-home task-first) + Phase 5.3 shipping reality. الصياغة الجديدة أعلاه تُطابق النية الأصلية لـ onboarding + تُحترِم القرارَين اللاحقَين.
+
+**التاريخ**: 2026-04-19، مُصحَّح 2026-04-23.
 
 ### D-50 — User-Friendly Error Messages
 
