@@ -77,6 +77,8 @@ export default authMiddleware((req) => {
 });
 
 export const config = {
-  // Run on everything except Next.js internals + static assets.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|fonts/).*)"],
+  // Skip /api/auth/* too — NextAuth's handler sets its own csrf cookies, and the
+  // middleware's auth() wrapper would emit a second Set-Cookie, duplicating
+  // __Host-authjs.csrf-token and breaking credential POSTs with MissingCSRF.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|fonts/|api/auth/).*)"],
 };

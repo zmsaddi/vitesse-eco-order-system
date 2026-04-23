@@ -41,4 +41,13 @@ export const authConfig = {
   },
 
   trustHost: true,
+
+  logger: {
+    error(error) {
+      console.error("[auth.error]", error?.name, error?.message, error?.cause);
+    },
+    warn(code) {
+      console.warn("[auth.warn]", code);
+    },
+  },
 } satisfies NextAuthConfig;
