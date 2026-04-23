@@ -13,7 +13,7 @@ export default async function OrdersPage() {
           className="cursor-not-allowed rounded bg-gray-300 px-4 py-2 text-sm text-gray-500 dark:bg-gray-700 dark:text-gray-400"
           aria-disabled
         >
-          + طلب جديد (Phase 3)
+          + طلب جديد
         </button>
       </header>
       <p className="text-sm text-gray-500">

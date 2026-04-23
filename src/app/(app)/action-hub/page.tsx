@@ -1,35 +1,41 @@
+import { cookies, headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { enforcePageRole } from "@/lib/session-claims";
+import { PageShell } from "@/components/ui/PageShell";
+import type { ActionHubResponse } from "@/modules/action-hub/dto";
+import { ActionHubClient } from "./ActionHubClient";
 
-// D-72 Action Hub — admin-only landing (pm/gm/manager).
-// Phase 2.1: enforcePageRole redirects wrong-role visitors to their own role-home
-// (previously threw PermissionError → Next.js error page).
+// Phase 6.2 — Action Hub landing (pm/gm/manager role-home per D-72).
+// Canonical fetch to /api/v1/action-hub; wrong-role visitors redirect to
+// their own role-home via enforcePageRole.
+
+async function fetchActionHubCanonically(): Promise<ActionHubResponse> {
+  const hdrs = await headers();
+  const host = hdrs.get("host");
+  if (!host) {
+    throw new Error("action-hub page: cannot resolve host from incoming request");
+  }
+  const protocol = hdrs.get("x-forwarded-proto") ?? "http";
+  const cookieStr = (await cookies()).toString();
+  const res = await fetch(`${protocol}://${host}/api/v1/action-hub`, {
+    headers: { cookie: cookieStr },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`GET /api/v1/action-hub → ${res.status}`);
+  }
+  return (await res.json()) as ActionHubResponse;
+}
 
 export default async function ActionHubPage() {
   const claims = await enforcePageRole(["pm", "gm", "manager"]);
+  if (!claims) redirect("/login");
+
+  const data = await fetchActionHubCanonically();
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold">مركز العمل</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          أهلاً {claims.name}. المرحلة 1 — الـ shell فقط. إجراءات الأولوية + آخر نشاط الفريق تُضاف في Phase 3.
-        </p>
-      </header>
-
-      <section aria-label="إجراءات مُلحَّة" className="rounded border border-gray-200 p-4 dark:border-gray-800">
-        <h2 className="mb-2 font-semibold">إجراءات مُلحَّة</h2>
-        <p className="text-sm text-gray-500">لا إجراءات حالياً (Phase 3).</p>
-      </section>
-
-      <section aria-label="آخر نشاط" className="rounded border border-gray-200 p-4 dark:border-gray-800">
-        <h2 className="mb-2 font-semibold">آخر نشاط</h2>
-        <p className="text-sm text-gray-500">سجل النشاط يُعرَض هنا ابتداءً من Phase 4.</p>
-      </section>
-
-      <section aria-label="حالة الفرق" className="rounded border border-gray-200 p-4 dark:border-gray-800">
-        <h2 className="mb-2 font-semibold">حالة الفرق</h2>
-        <p className="text-sm text-gray-500">Counts (Phase 3): orders today · deliveries pending · low stock · open cancellations.</p>
-      </section>
-    </div>
+    <PageShell title="مركز العمل" subtitle={`أهلاً ${claims.name}`}>
+      <ActionHubClient data={data} />
+    </PageShell>
   );
 }

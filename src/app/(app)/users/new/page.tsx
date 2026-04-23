@@ -143,7 +143,7 @@ export default async function NewUserPage({
             label="كلمة المرور الأولية"
             htmlFor="password"
             required
-            hint="8 أحرف على الأقل. سيُطلب من المستخدم تغييرها عند أول دخول (Phase 5)."
+            hint="8 أحرف على الأقل. سيُطلب من المستخدم تغييرها من إعدادات الحساب بعد أول دخول."
           >
             <input
               id="password"

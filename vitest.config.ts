@@ -84,6 +84,8 @@ export default defineConfig({
         "src/modules/reports/service.ts",         // Phase 5.3 — reports dispatcher (DB-heavy)
         "src/modules/reports/runners-financial.ts",  // Phase 5.3 — P&L + expenses-by-category queries (DB-heavy)
         "src/modules/reports/runners-rankings.ts",   // Phase 5.3 — timeseries + rankings queries (DB-heavy)
+        "src/modules/action-hub/urgent-actions.ts",  // Phase 6.2 — 4 DB count helpers + team-scope resolver (integration). Pure sub-helpers (isoDaysAgo, isIncompleteSettingValue) have their own unit tests.
+        "src/modules/**/dto.ts", // Zod schemas — structural; exercised end-to-end via integration response validation tests.
         "src/modules/**/mappers.ts", // Trivial projections — covered via integration
         "src/modules/**/service.ts", // Business logic — covered by integration tests (require DB)
         "src/modules/users/nav.ts",  // Trivial re-export — covered via integration

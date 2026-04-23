@@ -1,8 +1,8 @@
 import { signIn } from "@/auth";
 import { redirect } from "next/navigation";
 
-// Minimal login shell — Phase 1 MVP (D-71: narrow scope).
-// Polish (toast feedback, password visibility, forgot-password) deferred to Phase 5.
+// Login shell (D-71: narrow scope).
+// Polish (toast feedback, password visibility, forgot-password) deferred post-MVP.
 
 type SearchParams = { next?: string; error?: string };
 
@@ -86,8 +86,6 @@ export default async function LoginPage({
             دخول
           </button>
         </form>
-
-        <p className="mt-6 text-center text-xs text-gray-500">Vitesse Eco — Phase 1</p>
       </div>
     </main>
   );

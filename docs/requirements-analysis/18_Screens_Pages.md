@@ -15,7 +15,7 @@
 
 ---
 
-## خريطة الصفحات (25 صفحة)
+## خريطة الصفحات (30 صفحة)
 
 | # | الصفحة | المسار | النمط | المرحلة |
 |---|--------|--------|:-----:|:-------:|
@@ -48,6 +48,7 @@
 | 27 | تقرير مفرد | `/reports/[slug]` | Read-only + Chart + CSV | 5.3 (shipped) |
 | 28 | طباعة فاتورة (HTML) | `/invoices/[id]/print` | Read-only + Browser-print | 5.5 (shipped) |
 | 29 | Offline fallback | `/offline` | Static (PWA SW fallback) | 5.5 (shipped) |
+| 30 | مركز العمل (Action Hub) | `/action-hub` | Read-only (3 أقسام: urgent + recent activity + team counts) | 6.2 (shipped) |
 
 تفاصيل الأدوار لكل صفحة في ملف `15_Roles_Permissions.md`.
 
