@@ -1,0 +1,26 @@
+{
+  "name": "Vitesse Eco — نظام إدارة الطلبات",
+  "short_name": "Vitesse",
+  "description": "نظام إدارة الطلبات والعمليات لـ VITESSE ECO SAS",
+  "start_url": "/action-hub",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#111827",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    }
+  ]
+}

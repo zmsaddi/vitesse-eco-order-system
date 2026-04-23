@@ -33,7 +33,7 @@
 
 ### Cairo Contrast Tokens
 
-تُعرَّف في `tailwind.config.ts` حتى قبل dark mode Phase 5:
+**Phase 5.5 update (2026-04-23)**: لا `tailwind.config.ts` — المشروع على Tailwind v4 CSS-first. الـdark variant مُعرَّف في `src/app/globals.css` عبر `@custom-variant dark (&:where(.dark, .dark *))`. التوكنز أدناه تبقى كمرجع semantic؛ في التنفيذ الفعلي، الـutilities `dark:bg-*` + `dark:text-*` المستخدَمة عبر الكود تفعَّل عند `<html class="dark">`. ThemeProvider في `src/components/theme/` يُدير الـ3 states: `system` (default) / `light` / `dark`، مع localStorage persistence + no-flash inline script في `<head>` قبل hydration. Toggle في Topbar بجوار الـBell.
 
 ```ts
 colors: {

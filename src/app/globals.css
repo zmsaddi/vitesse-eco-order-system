@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Phase 5.5 — class-based dark mode (required for Tailwind v4).
+   Without this, the many `dark:` utilities scattered across the codebase
+   only activate via `prefers-color-scheme: dark`. With this variant, they
+   activate when any ancestor (typically `<html>`) carries the `dark`
+   class — which is what our ThemeProvider toggles. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: var(--font-cairo), system-ui, sans-serif;
 }
@@ -12,4 +19,42 @@ body {
   font-feature-settings:
     "rlig" 1,
     "calt" 1;
+}
+
+/* Phase 5.5 — print stylesheet for /invoices/[id]/print.
+   The page wraps the invoice in `<div class="print-invoice">`; everything
+   else (topbar, sidebar, on-screen print button) is hidden. A4 margins
+   match the pdfkit defaults so browser-print + PDF route stay visually
+   close. The French content inside .print-invoice overrides the
+   document-level RTL so numbers + SIRET line up correctly. */
+@media print {
+  @page {
+    size: A4;
+    margin: 20mm 15mm;
+  }
+
+  body > *:not(.print-root) {
+    /* No-op fallback — the actual chrome-hiding is class-based below. */
+  }
+
+  .no-print,
+  [data-no-print] {
+    display: none !important;
+  }
+
+  .print-invoice {
+    direction: ltr;
+    font-family: var(--font-cairo), sans-serif;
+    color: #000;
+    background: #fff;
+  }
+
+  .print-invoice table {
+    page-break-inside: auto;
+  }
+
+  .print-invoice tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
 }

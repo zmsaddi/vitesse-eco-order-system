@@ -74,17 +74,25 @@ export function renderTable(data: AnyReport): React.ReactElement {
             </tr>
           </thead>
           <tbody>
-            {data.rows.map((r) => (
-              <tr
-                key={r.clientId}
-                className="border-t border-gray-100 dark:border-gray-800"
-              >
-                <td className="px-3 py-2">{r.clientName}</td>
-                <td className="px-3 py-2" dir="ltr">
-                  {r.totalRemaining}€
+            {data.rows.length === 0 ? (
+              <tr>
+                <td colSpan={2} className="px-3 py-4 text-center text-gray-500">
+                  لا عملاء بديون مستحقة.
                 </td>
               </tr>
-            ))}
+            ) : (
+              data.rows.map((r) => (
+                <tr
+                  key={r.clientId}
+                  className="border-t border-gray-100 dark:border-gray-800"
+                >
+                  <td className="px-3 py-2">{r.clientName}</td>
+                  <td className="px-3 py-2" dir="ltr">
+                    {r.totalRemaining}€
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       );
@@ -99,20 +107,28 @@ export function renderTable(data: AnyReport): React.ReactElement {
             </tr>
           </thead>
           <tbody>
-            {data.rows.map((r) => (
-              <tr
-                key={r.productId}
-                className="border-t border-gray-100 dark:border-gray-800"
-              >
-                <td className="px-3 py-2">{r.productName}</td>
-                <td className="px-3 py-2" dir="ltr">
-                  {r.revenue}€
-                </td>
-                <td className="px-3 py-2" dir="ltr">
-                  {r.qty}
+            {data.rows.length === 0 ? (
+              <tr>
+                <td colSpan={3} className="px-3 py-4 text-center text-gray-500">
+                  لا مبيعات منتجات ضمن الفترة.
                 </td>
               </tr>
-            ))}
+            ) : (
+              data.rows.map((r) => (
+                <tr
+                  key={r.productId}
+                  className="border-t border-gray-100 dark:border-gray-800"
+                >
+                  <td className="px-3 py-2">{r.productName}</td>
+                  <td className="px-3 py-2" dir="ltr">
+                    {r.revenue}€
+                  </td>
+                  <td className="px-3 py-2" dir="ltr">
+                    {r.qty}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       );
@@ -126,17 +142,25 @@ export function renderTable(data: AnyReport): React.ReactElement {
             </tr>
           </thead>
           <tbody>
-            {data.rows.map((r) => (
-              <tr
-                key={r.category}
-                className="border-t border-gray-100 dark:border-gray-800"
-              >
-                <td className="px-3 py-2">{r.category}</td>
-                <td className="px-3 py-2" dir="ltr">
-                  {r.total}€
+            {data.rows.length === 0 ? (
+              <tr>
+                <td colSpan={2} className="px-3 py-4 text-center text-gray-500">
+                  لا مصاريف ضمن الفترة.
                 </td>
               </tr>
-            ))}
+            ) : (
+              data.rows.map((r) => (
+                <tr
+                  key={r.category}
+                  className="border-t border-gray-100 dark:border-gray-800"
+                >
+                  <td className="px-3 py-2">{r.category}</td>
+                  <td className="px-3 py-2" dir="ltr">
+                    {r.total}€
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       );
@@ -151,18 +175,26 @@ export function renderTable(data: AnyReport): React.ReactElement {
             </tr>
           </thead>
           <tbody>
-            {data.rows.map((r) => (
-              <tr
-                key={`${r.userId}-${r.role}`}
-                className="border-t border-gray-100 dark:border-gray-800"
-              >
-                <td className="px-3 py-2">{r.username}</td>
-                <td className="px-3 py-2">{r.role}</td>
-                <td className="px-3 py-2" dir="ltr">
-                  {r.totalBonus}€
+            {data.rows.length === 0 ? (
+              <tr>
+                <td colSpan={3} className="px-3 py-4 text-center text-gray-500">
+                  لا عمولات ضمن الفترة.
                 </td>
               </tr>
-            ))}
+            ) : (
+              data.rows.map((r) => (
+                <tr
+                  key={`${r.userId}-${r.role}`}
+                  className="border-t border-gray-100 dark:border-gray-800"
+                >
+                  <td className="px-3 py-2">{r.username}</td>
+                  <td className="px-3 py-2">{r.role}</td>
+                  <td className="px-3 py-2" dir="ltr">
+                    {r.totalBonus}€
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       );

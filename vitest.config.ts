@@ -15,13 +15,17 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
+    include: [
+      "src/**/*.test.{ts,tsx}",
+      "tests/**/*.test.{ts,tsx}",
+    ],
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],
       include: ["src/**/*.{ts,tsx}"],
       exclude: [
         "src/**/*.test.ts",
+        "src/**/*.test.tsx",
         "src/app/**",            // UI + route handlers — covered by E2E / integration (Phase 1+)
         "src/middleware.ts",     // Edge middleware — tested via integration + manual
         "src/auth.ts",           // Auth.js wiring — covered by integration (login flow) in Phase 1+

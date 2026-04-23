@@ -5,6 +5,7 @@ import { withRead } from "@/db/client";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { getNavForRole } from "@/modules/users/nav";
 import { Providers } from "@/app/providers";
+import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
 import { countUnread } from "@/modules/notifications/service";
 
 // Shared layout for all authenticated pages (inside (app) route group).
@@ -30,6 +31,7 @@ export default async function AuthenticatedAppLayout({
 
   return (
     <Providers>
+      <ServiceWorkerRegister />
       <AppLayout
         claims={claims}
         currentPath={currentPath}

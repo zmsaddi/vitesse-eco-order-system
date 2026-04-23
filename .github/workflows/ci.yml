@@ -25,8 +25,25 @@ jobs:
       - name: Setup Node 24
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
+
+      # Phase 5.5 — CI hardening: cache Next.js build artifacts across
+      # runs so rebuilds stay fast when source hasn't churned much.
+      - name: Cache .next/build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            .next/cache
+          key: ${{ runner.os }}-next-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**/*.ts', 'src/**/*.tsx', 'src/**/*.css') }}
+          restore-keys: |
+            ${{ runner.os }}-next-${{ hashFiles('package-lock.json') }}-
+            ${{ runner.os }}-next-
+
+      # Phase 5.5 — CI hardening: refuse to proceed if .nvmrc drifts from
+      # engines.node in package.json. Runs before `npm ci` to fail fast.
+      - name: Gate 0 — .nvmrc ⇔ engines.node consistency
+        run: node scripts/verify-nvmrc.mjs
 
       # ─────────────────────────────────────────────
       # Gate 1 — Lockfile enforcement (D-70)
@@ -130,13 +147,33 @@ jobs:
           path: coverage/
           retention-days: 30
 
+  # Phase 5.5 — CI hardening: non-blocking `npm audit` surfaces known
+  # vulnerabilities without gating merges. Security fixes proceed on
+  # their own cadence via separate PRs.
+  audit:
+    name: npm audit (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: npm audit (moderate+)
+        run: npm audit --audit-level=moderate --production || true
+
 # ═══════════════════════════════════════════════════════════════
 # ملاحظات التنفيذ (D-75 + D-78):
-# - كل gate blocking: فشل أيٍّ = CI أحمر = لا merge.
+# - كل gate blocking في quality job: فشل أيٍّ = CI أحمر = لا merge.
 # - بعض gates تعود no-op حالياً (echo placeholders في package.json)
 #   حتى الـ feature code يُضاف تدريجياً في Phase 0..6.
 #   تُفعَّل تلقائياً عند استبدال الـ script بالأمر الحقيقي.
 # - Scope-based conditional tests (D-78 §6) تُشغَّل يدوياً عبر workflow_dispatch
 #   أو تُدمج تلقائياً عبر path filters في PR.
 # - Coverage thresholds مُكوَّنة في vitest.config.ts (lines thresholds).
+# - audit job غير blocking: يُنتِج تقرير محذرين دون وقف merge.
 # ═══════════════════════════════════════════════════════════════

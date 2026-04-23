@@ -2026,6 +2026,47 @@ CREATE UNIQUE INDEX expenses_one_reversal_per_original
 
 **التاريخ**: 2026-04-23.
 
+### D-84 — PWA Minimal Scope
+
+**القرار**: Phase 5.5 يشحن PWA بحد أدنى صريح فقط. **ما يُشحن**:
+- `public/manifest.webmanifest` — name/short_name/start_url/icons/theme_color/dir=rtl/lang=ar.
+- `public/icons/icon-192.png` + `public/icons/icon-512-maskable.png` — مولَّدة من SVG المصدر عبر script لمرة واحدة (`scripts/generate-pwa-icons.mjs`، يستخدم `sharp` الذي يصله transitively من Next 16 image pipeline؛ **لا dependency جديد في `package.json`**).
+- `public/sw.js` — service worker مكتوب يدوياً (~80 سطر، لا Workbox runtime).
+- `src/components/pwa/ServiceWorkerRegister.tsx` — client component يسجِّل الـSW في **production فقط** (`process.env.NODE_ENV === "production"`)، داخل الـ `(app)/layout.tsx` tree ليُسجَّل فقط للمستخدمين المُصادَقين.
+- صفحة `/offline` static minimal تُخدَم عند فشل التنقل.
+
+**ما لا يُشحن (deliberately out of scope)**:
+- **لا Workbox runtime** — يضيف ~14KB JS؛ السلوك بسيط بما يكفي لكود 80-سطر يدوي.
+- **لا offline data sync** (IndexedDB + queue + conflict resolution) — تصميم مختلف، outside MVP.
+- **لا push notifications** — D-22 يحصر الإشعارات في in_app فقط، ولا SMTP/Web Push في الـstack.
+- **لا app-icon platforms** غير 192+512 (iOS-specific splash, apple-touch-icon variants, Windows tile) — تُضاف عند الحاجة في tranche منفصلة.
+- **لا precaching للصفحات المُصادَقة** — الـSW fetch handler يستبعد `/api/*` و `/auth/*` صراحة، لأن caching بيانات مُصادَق عليها cross-session = تسريب.
+
+**Fetch strategy** (per sw.js):
+- Navigation → network-first → fall back إلى `/offline` المُـprecached.
+- Static assets (`/_next/static`, `/fonts`, `/icons`, manifest) → stale-while-revalidate.
+- API + auth → bypass the worker entirely.
+- لا POST/PUT/DELETE caching مطلقاً.
+
+**Re-activation trigger**: إذا استدعت الحاجة offline data أو push notifications، تُضاف في trance منفصلة عبر decision record جديد. الـSW الحالي يُستبدل بمعمارية أكثر قدرة (Workbox + IndexedDB) عند اتخاذ هذا القرار.
+
+**المبررات (ranked)**:
+1. **Installable PWA = قيمة مباشرة** للمستخدم الموبايل (add-to-home-screen) بدون تعقيد offline-first.
+2. **Hand-rolled SW** ~80 سطر قابل للقراءة كامل، بدون dep جديد، بدون build-time generation يحتاج configuration لاحق.
+3. **Boundary صارم** مع البيانات المُصادَقة: الـSW لا يلمسها مطلقاً.
+4. **لا runtime cost إضافي** خارج precache الأولي (~50KB: icons + offline page + manifest).
+
+**الملفات المتأثرة**:
+- `public/manifest.webmanifest`, `public/sw.js`, `public/icons/*` (new).
+- `scripts/generate-pwa-icons.mjs` (new, one-shot).
+- `src/app/layout.tsx` (manifest link + theme-color viewport).
+- `src/app/(app)/layout.tsx` (mount ServiceWorkerRegister).
+- `src/app/offline/page.tsx` (static fallback).
+- `src/components/pwa/ServiceWorkerRegister.tsx` (new).
+- `src/components/pwa/manifest.test.ts` (shape sanity unit).
+
+**التاريخ**: 2026-04-23.
+
 ---
 
 ## ملحق: القرارات السابقة (مؤكَّدة سابقاً في DEVELOPMENT_PLAN.md)

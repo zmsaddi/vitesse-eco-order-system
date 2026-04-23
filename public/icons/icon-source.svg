@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Phase 5.5 — Vitesse Eco PWA icon source.
+     Dark navbar-matching theme (#111827) background + white "V·E" monogram.
+     512×512 viewBox used as canonical; PNGs generated at 192 and 512. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="96" fill="#111827" />
+  <g transform="translate(256 296)" fill="#ffffff" font-family="Cairo, system-ui, sans-serif" font-weight="700" text-anchor="middle">
+    <text x="-60" y="0" font-size="220" letter-spacing="-8">V</text>
+    <text x="60" y="0" font-size="220" letter-spacing="-8">E</text>
+  </g>
+  <rect x="96" y="384" width="320" height="16" rx="8" fill="#22c55e" />
+</svg>

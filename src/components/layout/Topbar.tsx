@@ -1,6 +1,7 @@
 import { signOut } from "@/auth";
 import type { SessionClaims } from "@/lib/session-claims";
 import { BellDropdown } from "./BellDropdown";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 async function logoutAction(): Promise<void> {
   "use server";
@@ -24,6 +25,7 @@ export function Topbar({
       <div className="text-sm text-gray-600 dark:text-gray-400">{/* breadcrumbs Phase 3 */}</div>
 
       <div className="flex items-center gap-4">
+        <ThemeToggle />
         <BellDropdown initialUnreadCount={initialUnreadCount} />
         <span className="text-sm">
           أهلاً، <strong>{claims.name}</strong>

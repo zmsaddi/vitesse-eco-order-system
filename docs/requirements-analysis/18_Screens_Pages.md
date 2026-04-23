@@ -46,6 +46,8 @@
 | 25 | سجل النشاطات | `/activity` | Read-only | 5.2 (shipped) |
 | 26 | التقارير (فهرس) | `/reports` | Read-only | 5.3 (shipped) |
 | 27 | تقرير مفرد | `/reports/[slug]` | Read-only + Chart + CSV | 5.3 (shipped) |
+| 28 | طباعة فاتورة (HTML) | `/invoices/[id]/print` | Read-only + Browser-print | 5.5 (shipped) |
+| 29 | Offline fallback | `/offline` | Static (PWA SW fallback) | 5.5 (shipped) |
 
 تفاصيل الأدوار لكل صفحة في ملف `15_Roles_Permissions.md`.
 

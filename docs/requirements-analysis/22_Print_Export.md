@@ -162,8 +162,20 @@ id;ref_code;date;client_name;total_amount;payment_method;status
 
 ## الطباعة المباشرة
 
-- **الفاتورة**: `GET /api/invoices/[id]/pdf` → يُفتح في تبويب جديد، يمكن طباعة من المتصفح.
-- **القيد العملي**: لا Gesamt printer setup — الاعتماد على "Print to PDF" من المتصفح.
+قناتا طباعة متوازيتان للفاتورة الواحدة. نفس المحتوى القانوني (D-35 mandatory mentions) ونفس frozen data، لكن رندر مختلف:
+
+| القناة | المسار | الرندر | الـstyle |
+|--------|-------|--------|---------|
+| PDF (server-generated) | `GET /api/v1/invoices/[id]/pdf` | pdfkit على الخادم | ثابت، deterministic، مرفوع إلى Blob cache (D-55 + D-56) |
+| HTML (browser-printable) | `/invoices/[id]/print` (page — Phase 5.5) | React server component → HTML | `@media print` في `globals.css` يُخفي topbar/sidebar. المستخدم يضغط Ctrl+P / Cmd+P؛ المتصفح يتولّى الإخراج |
+
+**أيهما يُستخدَم؟**
+- **PDF** للمحاسب/الأرشفة/التصدير إلى الـexpert-comptable — القالب مستقر لا يعتمد على المتصفح.
+- **HTML print** للمستخدم الذي يريد طباعة فورية بلا pdfkit round-trip. مفيد كذلك على الموبايل (فتح in-browser → "Save as PDF" من OS).
+
+**الحقل نفسه = frozen**: كلا القناتين يقرآن `vendorSnapshot` + `paymentsHistory` + frozen columns على `invoice` + `invoice_lines`. تغيير `settings` بعد الإصدار لا يؤثِّر على أي من القناتين (D-30 + D-58).
+
+**Role access**: نفس مصفوفة PDF — pm/gm/manager + seller (own-order only) + driver (assigned-delivery only) + stock_keeper → 403.
 
 ---
 
