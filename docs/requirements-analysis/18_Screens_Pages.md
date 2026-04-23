@@ -20,7 +20,7 @@
 | # | الصفحة | المسار | النمط | المرحلة |
 |---|--------|--------|:-----:|:-------:|
 | 1 | تسجيل الدخول | `/login` | خاص | 1 |
-| 2 | لوحة التحكم | `/dashboard` | Dashboard | 5 |
+| 2 | لوحة التحكم | `/dashboard` | Dashboard | 5.3 (shipped) |
 | 3 | الطلبات | `/orders` | CRUD | 3 |
 | 4 | المشتريات | `/purchases` | CRUD | 3 |
 | 5 | المصاريف | `/expenses` | CRUD | 3 |
@@ -44,6 +44,8 @@
 | 23 | الإعدادات | `/settings` | خاص | 2 |
 | 24 | الصلاحيات | `/permissions` | خاص | 6 |
 | 25 | سجل النشاطات | `/activity` | Read-only | 5.2 (shipped) |
+| 26 | التقارير (فهرس) | `/reports` | Read-only | 5.3 (shipped) |
+| 27 | تقرير مفرد | `/reports/[slug]` | Read-only + Chart + CSV | 5.3 (shipped) |
 
 تفاصيل الأدوار لكل صفحة في ملف `15_Roles_Permissions.md`.
 

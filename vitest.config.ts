@@ -73,6 +73,13 @@ export default defineConfig({
         "src/hooks/useUnreadCount.ts",            // Phase 5.1b — zustand store + window.fetch wrapper; no JSDOM in vitest setup
         "src/hooks/useNotifications.ts",          // Phase 5.1b — tanstack-query wrappers around notifications-client; no JSDOM
         "src/modules/activity/service.ts",        // Phase 5.2 — activity list query + manager-team filter (DB-heavy, integration)
+        "src/modules/dashboard/service.ts",       // Phase 5.3 — dashboard dispatcher (DB-heavy, integration)
+        "src/modules/dashboard/kpi-helpers.ts",   // Phase 5.3 — DB SUM aggregations (DB-heavy)
+        "src/modules/dashboard/counts.ts",        // Phase 5.3 — DB COUNT queries (DB-heavy)
+        "src/modules/dashboard/treasury-view.ts", // Phase 5.3 — treasury role-scoped select (DB-heavy)
+        "src/modules/reports/service.ts",         // Phase 5.3 — reports dispatcher (DB-heavy)
+        "src/modules/reports/runners-financial.ts",  // Phase 5.3 — P&L + expenses-by-category queries (DB-heavy)
+        "src/modules/reports/runners-rankings.ts",   // Phase 5.3 — timeseries + rankings queries (DB-heavy)
         "src/modules/**/mappers.ts", // Trivial projections — covered via integration
         "src/modules/**/service.ts", // Business logic — covered by integration tests (require DB)
         "src/modules/users/nav.ts",  // Trivial re-export — covered via integration

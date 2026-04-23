@@ -14,6 +14,7 @@ export type NavItem = {
 export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   pm: [
     { href: "/action-hub", labelAr: "مركز العمل" },
+    { href: "/dashboard", labelAr: "لوحة التحكم" },
     { href: "/orders", labelAr: "الطلبات" },
     { href: "/clients", labelAr: "العملاء" },
     { href: "/products", labelAr: "المنتجات" },
@@ -22,6 +23,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { href: "/invoices", labelAr: "الفواتير" },
     { href: "/treasury", labelAr: "الصناديق" },
     { href: "/settlements", labelAr: "التسويات" },
+    { href: "/reports", labelAr: "التقارير" },
     { href: "/notifications", labelAr: "الإشعارات" },
     { href: "/activity", labelAr: "سجل النشاطات" },
     { href: "/users", labelAr: "المستخدمون" },
@@ -29,6 +31,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   ],
   gm: [
     { href: "/action-hub", labelAr: "مركز العمل" },
+    { href: "/dashboard", labelAr: "لوحة التحكم" },
     { href: "/orders", labelAr: "الطلبات" },
     { href: "/clients", labelAr: "العملاء" },
     { href: "/products", labelAr: "المنتجات" },
@@ -37,17 +40,20 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { href: "/invoices", labelAr: "الفواتير" },
     { href: "/treasury", labelAr: "الصناديق" },
     { href: "/settlements", labelAr: "التسويات" },
+    { href: "/reports", labelAr: "التقارير" },
     { href: "/notifications", labelAr: "الإشعارات" },
     { href: "/activity", labelAr: "سجل النشاطات" },
     { href: "/users", labelAr: "المستخدمون" },
   ],
   manager: [
     { href: "/action-hub", labelAr: "مركز العمل" },
+    { href: "/dashboard", labelAr: "لوحتي" },
     { href: "/orders", labelAr: "طلبات فريقي" },
     { href: "/clients", labelAr: "العملاء" },
     { href: "/products", labelAr: "المنتجات" },
     { href: "/deliveries", labelAr: "التوصيلات" },
     { href: "/treasury", labelAr: "صندوقي" },
+    { href: "/reports", labelAr: "تقارير فريقي" },
     { href: "/notifications", labelAr: "الإشعارات" },
     { href: "/activity", labelAr: "سجل نشاط فريقي" },
     // Phase 4.4 contract (2026-04-21): /settlements is pm/gm only. Manager

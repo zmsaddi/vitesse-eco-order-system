@@ -1,7 +1,8 @@
 # لوحة التحكم — Dashboard Requirements
 
 > **رقم العنصر**: #25 | **المحور**: هـ | **الحالة**: مواصفات نهائية
-> **صلاحية**: `dashboard:view` موجودة لكل الأدوار الـ 6 في `15_Roles_Permissions.md`. المحتوى يختلف بحسب الدور ونطاق الرؤية (`16_Data_Visibility.md`).
+> **Phase 5.3 correction (2026-04-23)**: الـ`dashboard:view` كما كانت تُوصَف سابقاً لكل الأدوار الستة **لم تُنفَّذ** كذلك في MVP. القرار الفعلي المشحون في 5.3: `/dashboard` + `GET /api/v1/dashboard` **مقصوران على pm/gm/manager**. الأدوار التشغيلية (seller/driver/stock_keeper) **لا dashboard مستقل** في MVP — تهبط مباشرة على شاشة المهام (per §Operational Roles أدناه). KPIs الشخصية لهم تظهر كـheader cards على شاشة المهام لاحقاً (polish في 5.5).
+> **محتوى `/dashboard` يختلف بحسب الدور** عبر scope (pm/gm = global؛ manager = team — revenue + counts + outstandingDebts + treasury؛ netProfit + cashProfit = null للـmanager — pm/gm-only numbers).
 
 ---
 

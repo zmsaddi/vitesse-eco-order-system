@@ -143,6 +143,13 @@
 ~~`/api/v1/notifications/stream`~~ **محذوف (D-41)** — SSE لم يُحقَّق على Neon HTTP + Vercel timeout 300s. Polling هو الحل الوحيد.
 | `/api/v1/activity` | GET | pm,gm,manager(👁) | **Phase 5.2 — shipped** (explorer `/activity`). Query: `limit≤200, offset, entityType?, action?, userId?, dateFrom?, dateTo?` (dateTo inclusive، Europe/Paris). Response: `{ items, total, limit, offset }` مُرتَّبة `id DESC`. manager تصفية server-side: `user_id ∈ {self.userId} ∪ {u.id : u.manager_id = self.userId}` — لو طلب `userId` خارج النطاق → `items=[], total=0` (لا 403، لمنع oracle). seller/driver/stock_keeper → 403. الـDB + hash-chain writes موجودان منذ Phase 3؛ `verifyActivityLogChain` helper يُعاد استخدامه في الاختبارات. |
 
+## لوحة التحكم + التقارير (Phase 5.3)
+
+| المسار | Method | الأدوار | الوصف |
+|--------|--------|---------|-------|
+| `/api/v1/dashboard` | GET | pm, gm, manager | **Phase 5.3 — shipped**. KPIs + treasury balances + counts للفترة. Query: `dateFrom?=YYYY-MM-DD, dateTo?=YYYY-MM-DD` (Paris, dateTo inclusive؛ default = الشهر التقويمي الجاري حتى اليوم). Response: `{ period, kpis: { revenue, netProfit, outstandingDebts, cashProfit }, treasuryBalances[], counts: { ordersToday, deliveriesPending, lowStockCount, openCancellations } }`. `netProfit` + `cashProfit` = `null` للـmanager (pm/gm-only numbers). revenue + outstandingDebts + counts + treasuryBalances مقيَّدة على نطاق الفريق للـmanager (self + drivers where `users.manager_id = self.userId`). seller/driver/stock_keeper → 403. |
+| `/api/v1/reports/[slug]` | GET | pm, gm, manager (per-slug) | **Phase 5.3 — shipped**. 6 slugs في `REPORT_REGISTRY`: `pnl` (pm/gm), `revenue-by-day` (pm/gm/manager), `top-clients-by-debt` (pm/gm), `top-products-by-revenue` (pm/gm), `expenses-by-category` (pm/gm), `bonuses-by-user` (pm/gm/manager). Query: `dateFrom?, dateTo?` (نفس default دفتر التحكم). unknown slug → 404 `REPORT_NOT_FOUND`؛ slug مسموح تعاقدياً لكن غير مسموح لهذا الدور → 403 `FORBIDDEN`. Response shape يختلف per slug (see 24_Reports_List.md). CSV export client-side فقط — لا endpoint. |
+
 ## الصوت
 
 | المسار | Method | الأدوار | الوصف |
