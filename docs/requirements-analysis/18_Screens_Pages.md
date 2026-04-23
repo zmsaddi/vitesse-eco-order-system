@@ -43,7 +43,7 @@
 | 22 | المستخدمين | `/users` | CRUD | 2 |
 | 23 | الإعدادات | `/settings` | خاص | 2 |
 | 24 | الصلاحيات | `/permissions` | خاص | 6 |
-| 25 | سجل النشاطات | `/activity` | CRUD | 5 |
+| 25 | سجل النشاطات | `/activity` | Read-only | 5.2 (shipped) |
 
 تفاصيل الأدوار لكل صفحة في ملف `15_Roles_Permissions.md`.
 

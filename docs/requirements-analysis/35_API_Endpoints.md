@@ -141,7 +141,7 @@
 | `/api/v1/notifications/preferences` | GET/PUT | الكل (own-only) | **Phase 5.1a — shipped** — تفضيلاتي (channel = in_app فقط — D-22). GET يُنشئ 14 صف lazy-seed عند أول استدعاء (`enabled=true`). PUT body: `{ updates: [{ notificationType, enabled }] }`. |
 
 ~~`/api/v1/notifications/stream`~~ **محذوف (D-41)** — SSE لم يُحقَّق على Neon HTTP + Vercel timeout 300s. Polling هو الحل الوحيد.
-| `/api/v1/activity` | GET | pm,gm,manager(👁) | **Phase 5 — UI pending** (explorer `/activity` page). الـ DB + hash-chain writes موجودان منذ Phase 3 لكل mutation؛ endpoint الـ GET + الصفحة للـ filters (entity_type + date range + user) تصلان في Phase 5 (Step 2 بعد notifications). manager يرى فقط نشاط فريقه. |
+| `/api/v1/activity` | GET | pm,gm,manager(👁) | **Phase 5.2 — shipped** (explorer `/activity`). Query: `limit≤200, offset, entityType?, action?, userId?, dateFrom?, dateTo?` (dateTo inclusive، Europe/Paris). Response: `{ items, total, limit, offset }` مُرتَّبة `id DESC`. manager تصفية server-side: `user_id ∈ {self.userId} ∪ {u.id : u.manager_id = self.userId}` — لو طلب `userId` خارج النطاق → `items=[], total=0` (لا 403، لمنع oracle). seller/driver/stock_keeper → 403. الـDB + hash-chain writes موجودان منذ Phase 3؛ `verifyActivityLogChain` helper يُعاد استخدامه في الاختبارات. |
 
 ## الصوت
 

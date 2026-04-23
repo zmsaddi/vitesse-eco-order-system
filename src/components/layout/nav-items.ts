@@ -23,6 +23,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { href: "/treasury", labelAr: "الصناديق" },
     { href: "/settlements", labelAr: "التسويات" },
     { href: "/notifications", labelAr: "الإشعارات" },
+    { href: "/activity", labelAr: "سجل النشاطات" },
     { href: "/users", labelAr: "المستخدمون" },
     { href: "/settings", labelAr: "الإعدادات" },
   ],
@@ -37,6 +38,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { href: "/treasury", labelAr: "الصناديق" },
     { href: "/settlements", labelAr: "التسويات" },
     { href: "/notifications", labelAr: "الإشعارات" },
+    { href: "/activity", labelAr: "سجل النشاطات" },
     { href: "/users", labelAr: "المستخدمون" },
   ],
   manager: [
@@ -47,6 +49,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { href: "/deliveries", labelAr: "التوصيلات" },
     { href: "/treasury", labelAr: "صندوقي" },
     { href: "/notifications", labelAr: "الإشعارات" },
+    { href: "/activity", labelAr: "سجل نشاط فريقي" },
     // Phase 4.4 contract (2026-04-21): /settlements is pm/gm only. Manager
     // has no settlement-creation rights; link removed to match the API gate.
   ],

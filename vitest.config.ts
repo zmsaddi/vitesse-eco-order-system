@@ -72,6 +72,7 @@ export default defineConfig({
         "src/lib/notifications-client.ts",        // Phase 5.1b — browser fetch wrappers (no Node-side consumers; covered by manual UI test)
         "src/hooks/useUnreadCount.ts",            // Phase 5.1b — zustand store + window.fetch wrapper; no JSDOM in vitest setup
         "src/hooks/useNotifications.ts",          // Phase 5.1b — tanstack-query wrappers around notifications-client; no JSDOM
+        "src/modules/activity/service.ts",        // Phase 5.2 — activity list query + manager-team filter (DB-heavy, integration)
         "src/modules/**/mappers.ts", // Trivial projections — covered via integration
         "src/modules/**/service.ts", // Business logic — covered by integration tests (require DB)
         "src/modules/users/nav.ts",  // Trivial re-export — covered via integration
