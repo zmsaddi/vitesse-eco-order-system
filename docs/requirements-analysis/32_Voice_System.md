@@ -1,6 +1,11 @@
 # النظام الصوتي — Voice System
 
-> **رقم العنصر**: #32 | **المحور**: ز | **الحالة**: مواصفات نهائية
+> **رقم العنصر**: #32 | **المحور**: ز | **الحالة**: مواصفات نهائية — **Status: deferred post-MVP after Phase 5.4 re-evaluation (2026-04-23 — D-83)**.
+>
+> **ما تغيَّر**: هذه المواصفة **frozen** حتى إعادة التفعيل. لا implementation يُنفَّذ. infrastructure المرتبطة (schema tables + Groq SDK + 7 decisions: D-31/D-32/D-34/D-47/D-63/D-73/D-71) تبقى بلا لمس.
+> **ما لم يتغيَّر**: أي تفاصيل تقنية في هذا الملف — pipeline الـ12 خطوة + system prompt + normalizer + resolver + UX + roles + tables. عند إعادة التفعيل ستُستخدَم هذه المواصفة كما هي ما لم يصدر decision جديد يُعدِّلها.
+> **Re-activation trigger**: راجع D-83 في `00_DECISIONS.md` — ثلاثة شروط مجتمعة (طلب مستخدم مثبت + Phase 5.5 polish مغلَقة + MVP v1 عاش في production لفترة كافية).
+> **تقرير الـre-evaluation الكامل**: `docs/phase-reports/phase-5.4-voice-re-evaluation.md`.
 
 ---
 

@@ -1985,6 +1985,47 @@ CREATE UNIQUE INDEX expenses_one_reversal_per_original
 
 **التاريخ**: 2026-04-20.
 
+### D-83 — Voice Deferred Post-MVP
+
+**القرار**: Phase 5.4 (Voice input) **مؤجَّل إلى post-launch tranche**. لا يُنفَّذ الآن. لا src code، لا routes، لا migrations، لا Groq wiring، لا UI voice.
+
+**ينفِّذ قرار re-evaluation الموثَّق في**: `docs/phase-reports/phase-5.4-voice-re-evaluation.md` بتاريخ 2026-04-23 (HEAD وقت القرار: `4ed89a6` — Phase 5.3 accepted).
+
+**السبب المختصر** (التفاصيل الكاملة في تقرير الـre-evaluation):
+- Voice **ليس launch-blocker** — D-71 يُصنِّفه deferred بعد MVP v1.
+- التكلفة الهندسية (≈ 2,850 LOC + 3 tranches + mocking infrastructure جديد + maintenance burden فريد بسبب الاعتماد على ML models خارجية) **عالية مقابل قيمة غير مُثبَتة** من الـsellers.
+- Phase 5.5 polish (dark mode + empty states + printable invoice HTML + PWA + CI hardening) يُقدِّم قيمة مباشرة مؤكَّدة ليوم الإطلاق.
+- كل البنية التحتية لـvoice **محفوظة بلا لمس**: schema (`voice_logs` + `voice_rate_limits` + `entity_aliases` + `ai_corrections` + `ai_patterns`) + spec (`32_Voice_System.md`) + SDK (`groq-sdk` في deps) + 7 قرارات سابقة (D-31, D-32, D-34, D-47, D-63, D-73 + D-71 أصلاً). Re-activation = تنفيذ clean، ليس إعادة كتابة.
+
+**Re-activation trigger (necessary + sufficient)**:
+1. **طلب مثبت من مستخدمين حقيقيين** بعد launch MVP v1 (ليس hypothesis؛ signals فعلية).
+2. **Phase 5.5 polish مُغلَقة ومقبولة**.
+3. **MVP v1 شُحن لـproduction** وعاش لفترة كافية تُنتج feedback ذا معنى (≥ 30 يوم من الاستخدام الفعلي suggested، ليس إلزاميًا).
+
+كل من الثلاثة مطلوب قبل إعادة فتح voice — أي واحد لم يتحقق = voice يبقى deferred.
+
+**عند إعادة التفعيل**:
+- يُطلَب **Implementation Contract جديد** لـPhase 5.4 بأكمله (على الأرجح مقسَّم 5.4a / 5.4b / 5.4c — pipeline / UI / learn).
+- `32_Voice_System.md` يبقى **frozen spec** — لا يُعدَّل قبل عقد تفعيل جديد. أي تحديث على الـspec يمرّ عبر decision record جديد.
+- الـSDK + schema tables تُعاد فحصها لتوافقها مع Phase 4.x/5.x الحالي (لا يُتوقَّع drift نظرًا لعدم لمسها).
+
+**ما هو ليس deferred (موجود بالفعل)**:
+- Schema tables — في `0000_initial_schema.sql`، لا تُحذف.
+- `voice_logs_retention_days` setting key — موجود في `VALID_SETTINGS_KEYS`، لا يُحذف.
+- D-31, D-32, D-34, D-47, D-63, D-73 — تبقى سارية عند إعادة التفعيل.
+
+**Phase progression bearing**:
+- Phase 5 تشمل الآن: 5.1a ✅ + 5.1b ✅ + 5.2 ✅ + 5.3 ✅ + **5.4 deferred** + 5.5 pending.
+- إغلاق Phase 5 لا يتطلَّب voice. يتطلَّب فقط 5.5.
+- D-71 يُستوفى بشكل كامل بمجرد شحن 5.5 (voice كان "deferred with re-evaluation"؛ الـre-evaluation تمَّت وحكمت defer — الشرط مستوفى).
+
+**الملفات المتأثرة في هذه الترانش (docs-only)**:
+- `00_DECISIONS.md` (هذا القرار).
+- `32_Voice_System.md` (إضافة status note في الأعلى، بدون تعديل المواصفة التقنية).
+- `docs/phase-reports/phase-5.4-voice-re-evaluation.md` (تقرير الـre-evaluation الكامل).
+
+**التاريخ**: 2026-04-23.
+
 ---
 
 ## ملحق: القرارات السابقة (مؤكَّدة سابقاً في DEVELOPMENT_PLAN.md)
