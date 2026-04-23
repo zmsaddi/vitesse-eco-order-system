@@ -373,14 +373,14 @@ No production deployment without T+1h and T+24h monitoring reports.
 3. ✅ **Treasury core + handover + transfer + reconcile** (Phase 4.2 + 4.2.1 committed؛ transfer + reconcile في Phase 4.3؛ money-precision 2-decimal في Phase 4.3.1 + 4.3.2).
 4. ✅ **Settlements + `/my-bonus` + `cancel_as_debt`** (Phase 4.4 — BR-18 / BR-19 closed؛ UI completion + canonical-API + nav sync في Phase 4.4.1 at `5807b3b`).
 
-**مؤجَّل صراحة إلى ما بعد Phase 4 — NOT a closure blocker**:
-- **`/api/v1/distributions`** (Profit Distributions) → **Phase 6**. المبرِّر: expert-comptable يتولاها خارج النظام.
-- **Dashboards الثقيلة** (6 dashboards per-role + charts + widgets) → **Phase 5**.
-- **Reports dashboards** (P&L 3 views + seller performance + profit per order + top clients/suppliers) → **Phase 5**.
-- **Activity log explorer UI** (`/activity`) → **Phase 5** (الـDB + hash chain موجودان منذ Phase 3).
-- **Notifications expansion** (email/SMS channels، إشعارات advanced) → **Phase 5**.
-- **Voice system** (Groq STT + NLP) → **Phase 5** مع re-evaluation.
-- أي ميزة من Phase 5 / 6 بشكل عام.
+**مؤجَّل صراحة إلى ما بعد Phase 4 — NOT a closure blocker** (أُغلق Phase 5 بتاريخ 2026-04-23؛ الحالة الفعلية أدناه، مُحدَّثة في Closure Pack لـ Phase 5):
+- **`/api/v1/distributions`** (Profit Distributions) → **Phase 6 (لم يُشحن)**. المبرِّر: expert-comptable يتولاها خارج النظام.
+- **Dashboards** → ✅ **shipped في Phase 5.3** (`b145e15`): `/api/v1/dashboard` + `/dashboard` pm/gm/manager-only. لا "6 dashboards per-role" منفصلة — dashboard واحد role-scoped (pm/gm global، manager team-scoped، operational roles لا dashboard مستقل).
+- **Reports dashboards** → ✅ **shipped جزئياً في Phase 5.3** (`b145e15`): 6 report slugs (`pnl`, `revenue-by-day`, `top-clients-by-debt`, `top-products-by-revenue`, `expenses-by-category`, `bonuses-by-user`). 5 من الـ11 الأصلية مؤجَّلة أو خارج MVP — التفاصيل في `24_Reports_List.md`.
+- **Activity log explorer UI** (`/activity`) → ✅ **shipped في Phase 5.2** (`f1adf85`). pm/gm global، manager team-scoped، seller/driver/stock_keeper 403.
+- **Notifications (core)** → ✅ **shipped في Phase 5.1a/5.1b** (`cefb9b8` → `84ce852` → `3cc32fc` → `ff3c315`). **Notifications expansion** (email/SMS channels) = **ليست Phase 5؛ خارج MVP** — D-22 يحصر القنوات على `in_app` فقط، ولا SMTP ولا Web Push في الـstack. توسيع القنوات يتطلَّب decision record جديد.
+- **Voice system** (Groq STT + NLP) → ⏸️ **مؤجَّل post-MVP بقرار D-83** (Phase 5.4 re-evaluation، `4436d1d`). Schema + spec + SDK محفوظة. Re-activation trigger: طلب مستخدم مُثبَت + Phase 5.5 مُغلَقة + MVP v1 عاش في production.
+- **Polish** (dark mode + empty states + printable invoice HTML + PWA minimal + CI hardening) → ✅ **shipped في Phase 5.5** (`96971e8`).
 
 **خطوات إغلاق Phase 4 بعد baseline `4ba4c65`** (tranche واحدة في كل خطوة، Contract → تنفيذ → Self-Review → D-78 → gates → local commit → توقف):
 - ✅ **Step 1** → Phase 4.3 (Treasury transfer + reconcile، أربع categories فقط: funding / manager_settlement / bank_deposit / bank_withdrawal) — committed `ef5c57f` + 4.3.1 `e67cb26` + 4.3.2 `e0c8d20`.
@@ -392,7 +392,7 @@ No production deployment without T+1h and T+24h monitoring reports.
 
 > preparation board نُقل إلى Phase 3. Phase 4 يبدأ من `جاهز` ويغطي التسليم + الفواتير + الصناديق + حساب العمولات الفعلي + التسويات + الأرباح.
 
-**ملاحظة**: قائمة المهام التفصيلية التالية (1..13) تبقى كما هي للرجوع التاريخي، لكن بنود **8 (`/distributions`)، 10 (6 dashboards)، 11 (Reports)، والأطراف المذكورة تحت "Activity log UI"** تنتمي الآن رسمياً إلى **Phase 5 / 6** وليست blocker لإغلاق Phase 4.
+**ملاحظة**: قائمة المهام التفصيلية التالية (1..13) تبقى كما هي للرجوع التاريخي. البنود التي كانت تُشير إلى Phase 5 قد تغيَّرت حالتها بعد إغلاق Phase 5 (2026-04-23): Activity log UI + Dashboards + Reports + Polish + Notifications core **شُحنت**؛ Voice **مؤجَّل post-MVP** (D-83)؛ `/distributions` **لا يزال Phase 6**؛ Notifications expansion (email/SMS) = **ليست Phase 5، خارج MVP** ما لم يصدر decision جديد. التفاصيل مع commit SHAs أعلاه في القسم "مؤجَّل صراحة إلى ما بعد Phase 4".
 
 **الهدف**: end-to-end flow من طلب جاهز إلى تسوية يومية متوازنة.
 

@@ -2088,8 +2088,8 @@ CREATE UNIQUE INDEX expenses_one_reversal_per_original
 
 ## إشارة الحالة
 
-- **عدد القرارات الكلي**: **82** (D-01..D-82).
-- **آخر تحديث**: 2026-04-20 (Phase 3.0 pre-code design — D-79..D-82 مضافة).
+- **عدد القرارات الكلي**: **84** (D-01..D-84).
+- **آخر تحديث**: 2026-04-23 (Phase 5 Closure Pack — D-83 + D-84 مُضافان خلال Phase 5).
 - **حالة التطبيق**:
   - **D-01..D-25**: مُطبَّقة بالكامل على specs (Phase 0a).
   - **D-26..D-65**: مُطبَّقة على specs (Phase 0c — المراجعات الداخلية 01..06).
@@ -2100,8 +2100,10 @@ CREATE UNIQUE INDEX expenses_one_reversal_per_original
   - **D-80**: activity_log hash-chain write protocol (advisory lock يحمي الجدول الفارغ). Phase 3.0 infrastructure.
   - **D-81**: Phase 3.0 infrastructure precedence — activity_log + idempotency helpers قبل أي mutation handler جديد + TEST_DATABASE_URL شرط قبول.
   - **D-82**: expenses.reversal_of عمود FK بنيوي + partial unique + CHECK constraints. يحل محل convention في notes.
+  - **D-83**: Voice Deferred Post-MVP (Phase 5.4 re-evaluation). schema + spec + SDK + 7 قرارات سابقة (D-31/32/34/47/63/71/73) محفوظة؛ re-activation trigger موثَّق: طلب مستخدم مُثبَت + Phase 5.5 مُغلَقة + MVP v1 عاش في production لفترة كافية.
+  - **D-84**: PWA Minimal Scope (Phase 5.5). manifest + hand-rolled service worker (~80 LOC) + 2 PNG icons من SVG المصدر. الـSW يتجاوز `/api/*` و`/auth/*` — لا caching لبيانات مُصادَقة. لا Workbox، لا offline data sync، لا push.
 - **D-33 مُعلَّم SUPERSEDED** بواسطة D-73 (voice rate limit DB-only).
 - **D-75 CI gates مُوسَّع من 7 إلى 13 بواسطة D-78**.
-- **التالي**: Phase 3.0 code blocked على توفر `TEST_DATABASE_URL` (D-81). عند توفرها + تأكيد المستخدم "**ابدأ**" → يُنفَّذ Step B (activity_log helper + idempotency wrapper + integration tests + تعديل schema وفق D-82).
+- **التالي**: Phase 5 مُغلَقة (MVP v1 launch-ready من منظور الكود). Phase 6 (Permissions UI + `/distributions` + Command Palette) ينتظر إذن بعد قبول المستخدم.
 
 **Phase 0c closure report**: [`../audit-reports/07_developer_review_and_rebuttal.md`](../audit-reports/07_developer_review_and_rebuttal.md).
