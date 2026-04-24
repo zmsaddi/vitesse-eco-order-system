@@ -295,3 +295,7 @@ export async function listDeliveriesForDriver(
     (countRes as unknown as { rows?: Array<{ c: number }> }).rows?.[0]?.c ?? 0;
   return { rows: rowsList.map(deliveryRowToDto), total };
 }
+
+// Phase 6.4 — listDeliveries lives in ./list.ts (extracted to respect the
+// 300-line-per-file cap; same split pattern as confirm.ts / assign.ts).
+export { listDeliveries } from "./list";

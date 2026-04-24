@@ -70,8 +70,10 @@
 
 | المسار | Method | الأدوار | الوصف |
 |--------|--------|---------|-------|
-| `/api/v1/deliveries` | GET | الكل (مفلتر) | جلب التوصيلات |
-| `/api/v1/deliveries` | PUT | pm,gm,manager,driver | تحديث حالة (driver: تأكيد خاصتي) |
+| `/api/v1/deliveries` | GET | pm, gm, manager, driver | **Phase 6.4 — shipped**. Paginated list. Query: `limit?`, `offset?`, `status?`, `dateFrom?`, `dateTo?`, `assignedDriverId?`. Response: `{ deliveries: DeliveryDto[], total: number }`. pm/gm/manager = all deliveries (matches Phase 4.0 `enforceDeliveryVisibility`, no team-scope); driver delegates to `listDeliveriesForDriver` (self-only); seller + stock_keeper → 403. Ordering admin branch: `(date DESC, id DESC)`; driver branch unchanged. |
+| `/api/v1/deliveries` | POST | pm, gm, manager | **Phase 4.0 — shipped**. Create a delivery from an order currently in status "جاهز". Idempotency: optional header. Phase 6.4 did NOT touch this handler. |
+| `/api/v1/deliveries/[id]/start` | POST | pm, gm, manager, driver (assigned) | **Phase 4.0 — shipped**. Transition delivery to "جاري التوصيل". |
+| `/api/v1/deliveries/[id]/confirm-delivery` | POST | pm, gm, manager, driver (assigned) | **Phase 4.0 — shipped**. Transition to "تم التوصيل" + bridge payment + auto bonuses. |
 | `/api/v1/driver-tasks` | GET | pm,gm,manager,driver(خاصتي) | جلب المهام |
 | `/api/v1/driver-tasks` | POST | pm,gm,manager | تعيين مهمة |
 | `/api/v1/driver-tasks` | PUT | driver | تحديث حالة مهمتي |

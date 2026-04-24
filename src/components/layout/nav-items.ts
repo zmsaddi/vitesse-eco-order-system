@@ -8,9 +8,10 @@ import type { Role } from "@/lib/session-claims";
 // Phase 6.3 (Nav 404 Remediation) — structural invariants now enforced by
 // tests/integration/phase-6.3-nav-404-remediation.test.ts:
 //   - every href must map to an on-disk page.tsx under src/app/(app)/**
-//   - /deliveries removed until a GET list endpoint exists (deferred Phase 6.4)
 //   - /inventory removed until src/modules/inventory/** is built (deferred Phase 6.6)
 //   - /invoices expanded to every role the backend API allows (pm/gm/manager/seller/driver)
+// Phase 6.4 (Deliveries List Endpoint + /deliveries page) — re-adds
+// /deliveries to pm/gm/manager/driver now that GET /api/v1/deliveries exists.
 
 export type NavItem = {
   href: string;
@@ -26,6 +27,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { href: "/clients", labelAr: "العملاء" },
     { href: "/products", labelAr: "المنتجات" },
     { href: "/suppliers", labelAr: "الموردون" },
+    { href: "/deliveries", labelAr: "التوصيلات" },
     { href: "/invoices", labelAr: "الفواتير" },
     { href: "/treasury", labelAr: "الصناديق" },
     { href: "/settlements", labelAr: "التسويات" },
@@ -42,6 +44,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { href: "/clients", labelAr: "العملاء" },
     { href: "/products", labelAr: "المنتجات" },
     { href: "/suppliers", labelAr: "الموردون" },
+    { href: "/deliveries", labelAr: "التوصيلات" },
     { href: "/invoices", labelAr: "الفواتير" },
     { href: "/treasury", labelAr: "الصناديق" },
     { href: "/settlements", labelAr: "التسويات" },
@@ -56,6 +59,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { href: "/orders", labelAr: "طلبات فريقي" },
     { href: "/clients", labelAr: "العملاء" },
     { href: "/products", labelAr: "المنتجات" },
+    { href: "/deliveries", labelAr: "التوصيلات" },
     { href: "/invoices", labelAr: "فواتير فريقي" },
     { href: "/treasury", labelAr: "صندوقي" },
     { href: "/reports", labelAr: "تقارير فريقي" },
@@ -74,6 +78,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   ],
   driver: [
     { href: "/driver-tasks", labelAr: "مهامي" },
+    { href: "/deliveries", labelAr: "توصيلاتي" },
     { href: "/invoices", labelAr: "فواتير توصيلاتي" },
     { href: "/my-bonus", labelAr: "عمولتي" },
     { href: "/notifications", labelAr: "الإشعارات" },

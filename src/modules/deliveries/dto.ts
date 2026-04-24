@@ -61,3 +61,26 @@ export const ConfirmDeliveryInput = z.object({
   notes: z.string().max(2048).default(""),
 });
 export type ConfirmDeliveryInput = z.infer<typeof ConfirmDeliveryInput>;
+
+// Phase 6.4 — GET /api/v1/deliveries query shape.
+// Mirrors ListInvoicesQuery (limit/offset/dateFrom/dateTo) + adds delivery-
+// specific `status` + `assignedDriverId` filters. Accepted by pm/gm/manager;
+// driver branch ignores `status`/`dateFrom`/`dateTo`/`assignedDriverId` and
+// enforces self-only via listDeliveriesForDriver.
+export const ListDeliveriesQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+  status: z
+    .enum(["جاهز", "جاري التوصيل", "تم التوصيل", "ملغي"])
+    .optional(),
+  dateFrom: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  dateTo: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  assignedDriverId: z.coerce.number().int().positive().optional(),
+});
+export type ListDeliveriesQuery = z.infer<typeof ListDeliveriesQuery>;

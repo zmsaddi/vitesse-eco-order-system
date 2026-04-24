@@ -262,11 +262,17 @@ describe.skipIf(!HAS_DB)(
       expect(offenders, JSON.stringify(offenders)).toEqual([]);
     });
 
-    it("T-63-NAV-02: /deliveries is absent from every role's nav", async () => {
+    it("T-63-NAV-02: /deliveries absent from seller/stock_keeper (narrowed post-Phase 6.4)", async () => {
+      // Phase 6.3 originally asserted "/deliveries absent from every role".
+      // Phase 6.4 shipped `GET /api/v1/deliveries` + a /deliveries page, so
+      // pm/gm/manager/driver legitimately regain the nav entry. Test narrowed
+      // to the invariant that outlasts 6.4: seller + stock_keeper still don't
+      // see /deliveries (no backend path grants them the list). Presence in
+      // the four permitted roles is asserted by T-64-NAV-01.
       const { NAV_BY_ROLE } = await import("@/components/layout/nav-items");
-      for (const [role, items] of Object.entries(NAV_BY_ROLE)) {
-        const hrefs = items.map((i) => i.href);
-        expect(hrefs, `${role}`).not.toContain("/deliveries");
+      for (const role of ["seller", "stock_keeper"] as const) {
+        const hrefs = NAV_BY_ROLE[role].map((i) => i.href);
+        expect(hrefs, role).not.toContain("/deliveries");
       }
     });
 

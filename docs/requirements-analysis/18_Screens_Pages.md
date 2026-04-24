@@ -24,7 +24,7 @@
 | 3 | الطلبات | `/orders` | CRUD | 3 |
 | 4 | المشتريات | `/purchases` | CRUD | 3 |
 | 5 | المصاريف | `/expenses` | CRUD | 3 |
-| 6 | التوصيلات | `/deliveries` | CRUD | **6.3: nav-hidden — deferred to Phase 6.4 (no backend GET list endpoint; adding it is the 6.4 scope)** |
+| 6 | التوصيلات | `/deliveries` | Read-only list + filters + pagination | **6.4 (shipped)** — canonical fetch لـ `GET /api/v1/deliveries`. pm/gm/manager = الكل؛ driver = المُسنَدة له (يُفوَّض إلى `listDeliveriesForDriver`). seller + stock_keeper 403. لا detail page في هذه الترانش — start/confirm-delivery يبقيان متاحَين عبر `/driver-tasks`. |
 | 7 | مهام السائق | `/driver-tasks` | Tasks | 4 |
 | 8 | تحضير الطلبات (Stock Keeper) | `/preparation` | Tasks | 4 |
 | 9 | الفواتير | `/invoices` | Read-only list + PDF/print links | **6.3 (shipped)** — canonical fetch لـ `GET /api/v1/invoices`. pm/gm/manager/seller/driver (مطابق الـ backend). لا detail page في هذه الترانش؛ الوصول إلى تفاصيل فاتورة عبر `/invoices/[id]/print` (Phase 5.5). |
