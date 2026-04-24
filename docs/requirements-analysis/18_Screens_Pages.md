@@ -24,11 +24,11 @@
 | 3 | الطلبات | `/orders` | CRUD | 3 |
 | 4 | المشتريات | `/purchases` | CRUD | 3 |
 | 5 | المصاريف | `/expenses` | CRUD | 3 |
-| 6 | التوصيلات | `/deliveries` | CRUD | 4 |
+| 6 | التوصيلات | `/deliveries` | CRUD | **6.3: nav-hidden — deferred to Phase 6.4 (no backend GET list endpoint; adding it is the 6.4 scope)** |
 | 7 | مهام السائق | `/driver-tasks` | Tasks | 4 |
 | 8 | تحضير الطلبات (Stock Keeper) | `/preparation` | Tasks | 4 |
-| 9 | الفواتير | `/invoices` | CRUD | 4 |
-| 10 | الصندوق | `/treasury` | CRUD+Detail | 4 |
+| 9 | الفواتير | `/invoices` | Read-only list + PDF/print links | **6.3 (shipped)** — canonical fetch لـ `GET /api/v1/invoices`. pm/gm/manager/seller/driver (مطابق الـ backend). لا detail page في هذه الترانش؛ الوصول إلى تفاصيل فاتورة عبر `/invoices/[id]/print` (Phase 5.5). |
+| 10 | الصندوق | `/treasury` | Read-only accounts + movements | **6.3 (shipped)** — canonical fetch لـ `GET /api/v1/treasury`. pm/gm global؛ manager = own box + linked driver custodies؛ driver له access API لكن بلا nav link في هذه الترانش. |
 | 11 | التسويات | `/settlements` | CRUD | 4.4 |
 | 12 | توزيع الأرباح | `/distributions` | CRUD | 6 |
 | 13 | المخزون | `/stock` | CRUD | 2 |
@@ -38,7 +38,7 @@
 | 17 | تفاصيل عميل | `/clients/[id]` | Detail | 2 |
 | 18 | الموردين | `/suppliers` | CRUD | 2 |
 | 19 | تفاصيل مورد | `/suppliers/[id]` | Detail | 2 |
-| 20 | الجرد | `/inventory` | CRUD | 2 |
+| 20 | الجرد | `/inventory` | CRUD | **6.3: nav-hidden — deferred to Phase 6.6 (no `src/modules/inventory/**` module yet; full backend + UI tranche)** |
 | 21 | عمولتي | `/my-bonus` | Detail | 4.4 |
 | 22 | المستخدمين | `/users` | CRUD | 2 |
 | 23 | الإعدادات | `/settings` | خاص | 2 |

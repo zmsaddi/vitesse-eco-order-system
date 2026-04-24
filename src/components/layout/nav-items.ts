@@ -4,6 +4,13 @@ import type { Role } from "@/lib/session-claims";
 // + D-71 (MVP scope: no voice UI button, no command palette, no activity log UI, no permissions UI).
 // Phase 5.1b adds /notifications to every role's nav. /settings/notifications
 // is accessed via in-page link + bell dropdown, not a nav entry.
+//
+// Phase 6.3 (Nav 404 Remediation) — structural invariants now enforced by
+// tests/integration/phase-6.3-nav-404-remediation.test.ts:
+//   - every href must map to an on-disk page.tsx under src/app/(app)/**
+//   - /deliveries removed until a GET list endpoint exists (deferred Phase 6.4)
+//   - /inventory removed until src/modules/inventory/** is built (deferred Phase 6.6)
+//   - /invoices expanded to every role the backend API allows (pm/gm/manager/seller/driver)
 
 export type NavItem = {
   href: string;
@@ -19,7 +26,6 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { href: "/clients", labelAr: "العملاء" },
     { href: "/products", labelAr: "المنتجات" },
     { href: "/suppliers", labelAr: "الموردون" },
-    { href: "/deliveries", labelAr: "التوصيلات" },
     { href: "/invoices", labelAr: "الفواتير" },
     { href: "/treasury", labelAr: "الصناديق" },
     { href: "/settlements", labelAr: "التسويات" },
@@ -36,7 +42,6 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { href: "/clients", labelAr: "العملاء" },
     { href: "/products", labelAr: "المنتجات" },
     { href: "/suppliers", labelAr: "الموردون" },
-    { href: "/deliveries", labelAr: "التوصيلات" },
     { href: "/invoices", labelAr: "الفواتير" },
     { href: "/treasury", labelAr: "الصناديق" },
     { href: "/settlements", labelAr: "التسويات" },
@@ -51,7 +56,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { href: "/orders", labelAr: "طلبات فريقي" },
     { href: "/clients", labelAr: "العملاء" },
     { href: "/products", labelAr: "المنتجات" },
-    { href: "/deliveries", labelAr: "التوصيلات" },
+    { href: "/invoices", labelAr: "فواتير فريقي" },
     { href: "/treasury", labelAr: "صندوقي" },
     { href: "/reports", labelAr: "تقارير فريقي" },
     { href: "/notifications", labelAr: "الإشعارات" },
@@ -63,19 +68,19 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { href: "/orders", labelAr: "طلباتي" },
     { href: "/clients", labelAr: "العملاء" },
     { href: "/products", labelAr: "الكتالوج" },
+    { href: "/invoices", labelAr: "فواتيري" },
     { href: "/my-bonus", labelAr: "عمولتي" },
     { href: "/notifications", labelAr: "الإشعارات" },
   ],
   driver: [
     { href: "/driver-tasks", labelAr: "مهامي" },
-    { href: "/deliveries", labelAr: "توصيلاتي" },
+    { href: "/invoices", labelAr: "فواتير توصيلاتي" },
     { href: "/my-bonus", labelAr: "عمولتي" },
     { href: "/notifications", labelAr: "الإشعارات" },
   ],
   stock_keeper: [
     { href: "/preparation", labelAr: "التحضير" },
     { href: "/products", labelAr: "المنتجات" },
-    { href: "/inventory", labelAr: "الجرد" },
     { href: "/notifications", labelAr: "الإشعارات" },
   ],
 };
