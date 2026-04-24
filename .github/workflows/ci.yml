@@ -105,6 +105,9 @@ jobs:
 
       # ─────────────────────────────────────────────
       # Gate 9 — Authorization matrix tests
+      # P-audit-2 (post-Phase-6.4): tests/authz/matrix.test.ts is now a real
+      # 18-endpoint × 6-role table (108 cells). A guard file hard-fails this
+      # gate on CI+missing-secret, same pattern as Gate 6 + Gate 10.
       # ─────────────────────────────────────────────
       - name: Gate 9 — Authorization tests
         run: npm run test:authz
