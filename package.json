@@ -18,7 +18,7 @@
     "test:unit": "vitest run src/ --coverage",
     "test:integration": "vitest run tests/integration --testTimeout=45000 --hookTimeout=120000 --no-file-parallelism",
     "test:authz": "vitest run tests/authz --passWithNoTests",
-    "test:regression": "vitest run tests/regression --passWithNoTests",
+    "test:regression": "vitest run tests/regression --testTimeout=45000 --hookTimeout=120000 --no-file-parallelism",
     "test:money:edge": "vitest run tests/money --passWithNoTests",
     "test:auth:full": "vitest run tests/auth --passWithNoTests",
     "test:e2e:smoke": "node scripts/placeholder.mjs",

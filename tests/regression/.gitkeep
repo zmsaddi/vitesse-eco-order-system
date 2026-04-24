@@ -1,4 +1,0 @@
-placeholder — regression pack (D-78 §2) grows per phase:
- Phase 1: login, role resolution
- Phase 3: order create/edit/cancel/collect + idempotency + snapshots
- Phase 4: delivery confirm/handover + invoice generate/PDF/avoir + treasury + settlements

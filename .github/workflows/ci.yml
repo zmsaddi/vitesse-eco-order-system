@@ -113,6 +113,8 @@ jobs:
       # Gate 10 — Regression pack (permanent critical flows — D-78 §2)
       # login, orders, delivery, invoice, treasury, permissions,
       # idempotency, snapshots, soft-delete, /api/v1 compat, Android-ready
+      # P-audit-1 (post-Phase-6.4): tests/regression/** is now populated with
+      # real tests; a guard file hard-fails this gate on CI+missing-secret.
       # ─────────────────────────────────────────────
       - name: Gate 10 — Regression pack
         run: npm run test:regression
