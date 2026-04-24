@@ -233,20 +233,21 @@ Three local invocations verifying the guard file behaves like P-audit-4:
 
 - **Contract discipline**: reviewer's "don't touch `tests/integration/setup.ts`" constraint honoured — the regression pack imports `HAS_DB`, `TEST_DATABASE_URL`, `applyMigrations`, `resetSchema`, `wireManagerAndDrivers` from that setup file but makes zero modifications to it.
 - **Zero phase-test imports**: regression tests are NOT `black-box` re-runs of `tests/integration/**`; they compose their own seeds + call routes directly. The only shared surface is `tests/integration/setup.ts` helpers.
-- **23 tests exactly**: matches the pre-committed scope. 2 guard + 21 flow = 23.
+- **25 tests after A4 expansion**: original plan was 2 guard + 21 flow = 23. Post-reviewer amendment A4 expanded Flow 01 from 2 cases to 4 (added Zod-rejection + inactive-user branches), bringing the final count to 25. Contract baseline was "≥ 23" so this expansion respects the threshold and exceeds it.
 - **Flow mapping complete**: all 11 D-78 §2 flows have ≥ 1 assertion (see table below).
 - **Silent-green closed on Gate 10**: `--passWithNoTests` removed from `test:regression`; guard file fails in CI-without-secret exactly the same way P-audit-4 does for Gate 6. Double-gating identical.
-- **Three implementation-time amendments** applied transparently:
+- **Four implementation-time amendments** applied transparently:
   - **A1** Flow 09 (soft-delete) — the current codebase has NO HTTP `DELETE` endpoint for orders. The original contract §0 plan (`DELETE /api/v1/orders/[id]`) was infeasible. Reframed as invariant-guard using the existing `GET /api/v1/orders/[id]` detail endpoint: live order → 200, soft-deleted order → 404 (because `getOrderById` filters `isNull(deletedAt)`). Belt-and-suspenders: direct-DB check asserts the row physically exists with `deletedAt IS NOT NULL`.
   - **A2** Flow 02 (orders list) — no GET list endpoint exists at `/api/v1/orders`; only POST. Retargeted `T-PA1-ORDERS-02` to the detail endpoint (`GET /api/v1/orders/[id]`), which IS present. Same coverage intent.
   - **A3** Invoice detail shape — `InvoiceDetailDto` wraps as `{invoice, lines, avoirParent}`, not a flat projection. Snapshot tests (`T-PA1-INV-02`, `T-PA1-SNAP-01/02`) were updated to read nested `.invoice.*` after the first run surfaced the mismatch. Contract's acceptance criteria ("carries frozen fields, unchanged after product mutation") fully met.
+  - **A4** Flow 01 (login) — **post-reviewer correction after the first submission**. The original T-PA1-LOGIN-01/02 only exercised `verifyPassword()` against the stored hash, which guarded hash integrity but did NOT test the login round-trip the contract promised. A second attempt invoked the real `src/app/api/auth/[...nextauth]/route.ts` handlers directly; it failed with a vitest + next-auth + next ESM resolution incompatibility (`Cannot find module 'next/server'` inside `next-auth/lib/env.js`). Closing the gap requires either a `vitest.config.ts` `deps.inline: ['next-auth']` tweak or a `src/auth.ts` test-hook export — both explicitly out of this tranche's scope per the reviewer constraints. Per reviewer directive "لا تُبقِ الاسم 'login'" when the fix is technically impossible, the tests are renamed `T-PA1-AUTHCHAIN-01..04` and expanded from 2 to 4 cases: `replicatedAuthorize()` now mirrors the full authorize chain from `src/auth.ts` (Zod schema, DB lookup, active-check, Argon2 verify). The real HTTP round-trip regression remains deferred to P-audit-3 (Playwright E2E). Drift risk noted inline in the test file, identical pattern to the existing `tests/integration/auth-round-trip.test.ts` Group B.
 - **Transient flake observed once**: first full-suite integration run after this tranche reported `1 file failed / 8 skipped / 442 passed (450)` — same signature as the Phase 6.4 `gift_pool FK` ephemeral-Neon reset race. A clean rerun produced `450/450`. Not a 6.4 or P-audit-1 defect; pre-existing ephemeral-DB lifecycle noise (tracked in the Phase 6.4 audit as SEV-2).
 
 ### Invariants — proof mapping
 
 | Flow | Invariant | Proof |
 |------|-----------|-------|
-| 01 login | admin password hash verifies; wrong-password returns false | `T-PA1-LOGIN-01`, `T-PA1-LOGIN-02` |
+| 01 login (substitute — A4) | credentials-chain simulation: Zod + DB lookup + active-check + Argon2 verify; 4 branches covered | `T-PA1-AUTHCHAIN-01..04` |
 | 02 orders | POST 201 + refCode + id; detail endpoint returns the order | `T-PA1-ORDERS-01`, `T-PA1-ORDERS-02` |
 | 03 delivery | start-prep → mark-ready → create delivery → start → confirm-delivery, all 2xx | `T-PA1-DEL-01` |
 | 04 invoice | auto-issued after confirm; detail endpoint returns it | `T-PA1-INV-01`, `T-PA1-INV-02` |
@@ -285,7 +286,7 @@ All three exit codes match §6.b expectations.
 
 ### Known limitations (non-blocking)
 
-1. **Flow 01 login** is asserted via password-hash verify rather than end-to-end cookie round-trip. Cookie round-trip requires CSRF handshake + server-action payload encoding that's brittle to Next-Action hash changes across builds. Hash-verify gives us the cryptographic invariant the login flow actually depends on; the cookie layer is exercised by Phase 5 and 6.4 tests + pilot smoke.
+1. **Flow 01 login** is asserted via a REPLICATED authorize chain (A4), not a real HTTP round-trip against `/api/auth/[...nextauth]/route`. The technical blocker is vitest's ESM resolver vs next-auth's internal `next/server` import; closing it requires a change outside P-audit-1 scope. The replication covers DB lookup + active-check + Argon2 verify + Zod rejection — four of the five production authorize branches (the fifth, opportunistic bcrypt→argon2 rehash, is covered by Phase 6.4 tests). Real HTTP round-trip will land in P-audit-3 (Playwright). Drift risk identical to the existing `tests/integration/auth-round-trip.test.ts` Group B constraint note.
 2. **Soft-delete (Flow 09)** reframed per A1. The invariant "HTTP callers cannot retrieve soft-deleted rows" is covered; the invariant "HTTP callers can soft-delete" would require a new DELETE endpoint — a business-logic change outside P-audit-1's scope.
 3. **Android-ready (Flow 11)** is a contract-sanity assertion, not a live Bearer-token run. When the Android client lands, the bearer branch inside `getSessionClaims` activates and a second test layer can grow on top of this foundation.
 
@@ -301,7 +302,7 @@ All three exit codes match §6.b expectations.
 
 | # | Condition | Status |
 |---|-----------|--------|
-| 1 | `npm run test:regression` → 23+ tests green | ✓ **23/23** across 3 files in 28.14 s |
+| 1 | `npm run test:regression` → 23+ tests green | ✓ **25/25** across 3 files in 27.63 s (post-amendment A4) |
 | 2 | `npm run test:integration` → 450/450 still | ✓ **450/450** across 40 files in 733.01 s (zero pre-existing test touched) |
 | 3 | Three §6.b simulation exit codes match | ✓ EXIT=1 / EXIT=0 / EXIT=0 — transcripts above |
 | 4 | `git diff --stat` against declared not-touched paths = empty | ✓ verified at commit time |

@@ -13,15 +13,25 @@ import {
 //
 // Scope:
 //   - CI guard (no skipIf; mirrors P-audit-4 ci-guard pattern, reads test:regression line)
-//   - Flow 01 — login (auth round-trip via direct credentials endpoint)
+//   - Flow 01 SUBSTITUTE — credentials-chain simulation (see inline disclosure)
 //   - Flow 06 — permissions (pm allowed / seller + stock_keeper denied on a canonical endpoint)
 //   - Flow 10 — /api/v1 compat (shape of /api/v1/me response)
 //   - Flow 11 — Android-ready contract sanity (claims shape a mobile bearer client would need)
 //
-// Per Amendment A1 (implementation-time, §12 of the delivery report): the
-// original contract listed "login" via auth/callback/credentials. We keep
-// that plan but use the direct-endpoint path (same as Phase 6.4 smoke) to
-// avoid coupling this guard to the server-action Next-Action hash.
+// Amendments (documented verbatim in delivery report §12):
+//   A1 — NOT applied here (soft-delete was file 3's concern).
+//   A4 — Post-review correction. Flow 01 originally planned as true HTTP
+//        round-trip against /api/auth/[...nextauth]/route. Reviewer rejected
+//        the first implementation (hash-verify only). A second attempt via
+//        direct handler invocation fails due to a vitest + next-auth + next
+//        ESM resolution incompatibility for the bare specifier `next/server`
+//        inside next-auth/lib/env.js. Closing this requires either a
+//        `vitest.config.ts` deps.inline tweak or a src/auth.ts test-hook
+//        export — both out of P-audit-1 scope. Per reviewer directive
+//        "لا تُبقِ الاسم 'login'", the tests are renamed T-PA1-AUTHCHAIN-*
+//        and mirror the authorize callback logic explicitly (DB lookup +
+//        active-check + Argon2 verify). The "login round-trip" regression
+//        is deferred to P-audit-3 (Playwright E2E).
 
 describe("P-audit-1 guard", () => {
   it("T-PA1-GUARD-01: CI=true requires TEST_DATABASE_URL (HAS_DB must be true)", () => {
@@ -172,37 +182,100 @@ describe.skipIf(!HAS_DB)(
       name: "SK",
     });
 
-    // ─────────────────── Flow 01 — login ───────────────────
+    // ─────────────────── Flow 01 substitute — credentials-chain simulation ───────────────────
+    //
+    // ⚠ TECHNICAL CONSTRAINT — HONEST DISCLOSURE.
+    // A true HTTP round-trip through `src/app/api/auth/[...nextauth]/route.ts`
+    // is NOT possible inside vitest without either:
+    //   (a) `vitest.config.ts` deps.inline = ['next-auth'] to route its ESM
+    //       imports through vitest's bundler, or
+    //   (b) exposing src/auth.ts's `authorize` callback as a test hook.
+    // Both are explicitly out of scope for this tranche (reviewer constraints).
+    //
+    // Consequence: the test name carries "credentials-chain simulation" — NOT
+    // "login" — because we REPLICATE the authorize logic from src/auth.ts
+    // rather than invoking it. Same drift risk noted in
+    // tests/integration/auth-round-trip.test.ts Group B. Any change to
+    // authorize() in src/auth.ts MUST also update this replicated chain to
+    // prevent silent divergence. Future P-audit-3 (Playwright E2E) will
+    // cover the real HTTP round-trip.
 
-    it("T-PA1-LOGIN-01: valid admin credentials → 302 + session cookie", async () => {
-      // Direct NextAuth endpoint. Requires csrf round-trip first.
-      vi.resetModules();
-      vi.doMock("@/auth", async () => {
-        const actual = (await vi.importActual("@/auth")) as object;
-        return actual;
-      });
-      // CSRF handler is imported indirectly — skip in favor of asserting
-      // the schema: admin user exists and password hash verifies.
-      const { verifyPassword } = await import("@/lib/password");
+    /**
+     * Replicated authorize — mirrors src/auth.ts LoginInput Zod schema +
+     * DB lookup + active-check + Argon2 verify. No mutation paths (no
+     * needsRehash upgrade); those are covered indirectly by Phase 6.4.
+     */
+    async function replicatedAuthorize(
+      creds: { username?: string; password?: string },
+    ): Promise<{ id: string; username: string; role: string; name: string } | null> {
+      const u = creds.username ?? "";
+      const p = creds.password ?? "";
+      if (u.length < 3 || u.length > 64) return null;
+      if (p.length < 8) return null;
+
       const { withRead } = await import("@/db/client");
       const { users } = await import("@/db/schema");
-      const row = await withRead(undefined, (db) =>
-        db.select().from(users).where(eq(users.username, "admin")).limit(1),
+      const { verifyPassword } = await import("@/lib/password");
+
+      const rows = await withRead(undefined, (db) =>
+        db.select().from(users).where(eq(users.username, u)).limit(1),
       );
-      expect(row.length).toBe(1);
-      const ok = await verifyPassword(adminPassword, row[0].password);
-      expect(ok, "admin password must verify against stored hash").toBe(true);
+      const row = rows[0];
+      if (!row || !row.active) return null;
+
+      const ok = await verifyPassword(p, row.password);
+      if (!ok) return null;
+
+      return {
+        id: String(row.id),
+        username: row.username,
+        role: row.role,
+        name: row.name,
+      };
+    }
+
+    it("T-PA1-AUTHCHAIN-01: valid admin creds → authorize returns {id,username,role,name}", async () => {
+      const result = await replicatedAuthorize({
+        username: "admin",
+        password: adminPassword,
+      });
+      expect(result, "valid credentials must produce a user object").not.toBeNull();
+      expect(result!.username).toBe("admin");
+      expect(result!.role).toBe("pm");
+      expect(Number(result!.id)).toBeGreaterThan(0);
     });
 
-    it("T-PA1-LOGIN-02: wrong password → verify returns false", async () => {
-      const { verifyPassword } = await import("@/lib/password");
-      const { withRead } = await import("@/db/client");
+    it("T-PA1-AUTHCHAIN-02: wrong password → authorize returns null (no session)", async () => {
+      const result = await replicatedAuthorize({
+        username: "admin",
+        password: "deliberately-wrong-pw",
+      });
+      expect(result, "wrong password must yield null").toBeNull();
+    });
+
+    it("T-PA1-AUTHCHAIN-03: Zod rejection — username too short → null (never touches DB)", async () => {
+      const result = await replicatedAuthorize({ username: "a", password: adminPassword });
+      expect(result).toBeNull();
+    });
+
+    it("T-PA1-AUTHCHAIN-04: inactive-user guard — active=false → null even with valid password", async () => {
+      // Temporarily deactivate admin, assert null, restore.
+      const { withTxInRoute } = await import("@/db/client");
       const { users } = await import("@/db/schema");
-      const row = await withRead(undefined, (db) =>
-        db.select().from(users).where(eq(users.username, "admin")).limit(1),
+      await withTxInRoute(undefined, (tx) =>
+        tx.update(users).set({ active: false }).where(eq(users.username, "admin")),
       );
-      const ok = await verifyPassword("definitely-wrong", row[0].password);
-      expect(ok).toBe(false);
+      try {
+        const result = await replicatedAuthorize({
+          username: "admin",
+          password: adminPassword,
+        });
+        expect(result).toBeNull();
+      } finally {
+        await withTxInRoute(undefined, (tx) =>
+          tx.update(users).set({ active: true }).where(eq(users.username, "admin")),
+        );
+      }
     });
 
     // ─────────────────── Flow 06 — permissions ───────────────────
