@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import { NextResponse, type NextRequest } from "next/server";
 import { authConfig } from "./auth.config";
 import { buildForwardHeaders } from "./middleware-headers";
+import { isPublicMiddlewarePath } from "./middleware-public";
 import type { Role } from "./lib/session-claims";
 
 // D-59: middleware reads role from JWT — NO DB access (keeps invocation < 10ms).
@@ -9,14 +10,6 @@ import type { Role } from "./lib/session-claims";
 // This layer only enforces coarse-grained gates: auth required? role allowed?
 
 const { auth: authMiddleware } = NextAuth(authConfig);
-
-// Public routes — no auth required.
-const PUBLIC_PATHS = [
-  "/login",
-  "/api/auth",        // Auth.js endpoints (login, callback, session) — D-66 not versioned
-  "/api/health",      // Probe — D-66 not versioned
-  "/api/init",        // First-run setup — D-24 (rejects in production after first use)
-];
 
 // Role-based home redirect (D-72): operational roles → task-first; admin → action-hub.
 const ROLE_HOMES: Record<Role, string> = {
@@ -46,7 +39,7 @@ export default authMiddleware((req) => {
   const path = nextUrl.pathname;
 
   // Allow public paths through (still propagate x-pathname for consistency).
-  if (PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`))) {
+  if (isPublicMiddlewarePath(path)) {
     return nextWithPath(req, path);
   }
 
@@ -56,7 +49,7 @@ export default authMiddleware((req) => {
     // UI route → redirect to login. API route → 401 JSON.
     if (path.startsWith("/api/")) {
       return NextResponse.json(
-        { error: "غير مصرح — سجّل دخولك مجدداً", code: "UNAUTHORIZED" },
+        { error: "غير مصرح — سجّل دخولك مجددًا", code: "UNAUTHORIZED" },
         { status: 401 },
       );
     }
@@ -80,5 +73,6 @@ export const config = {
   // Skip /api/auth/* too — NextAuth's handler sets its own csrf cookies, and the
   // middleware's auth() wrapper would emit a second Set-Cookie, duplicating
   // __Host-authjs.csrf-token and breaking credential POSTs with MissingCSRF.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|fonts/|api/auth/).*)"],
+  // Installability assets stay public to avoid manifest/sw/icon redirects on /login.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|fonts/|icons/|manifest\\.webmanifest|sw\\.js|api/auth/).*)"],
 };
