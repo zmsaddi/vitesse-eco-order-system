@@ -80,6 +80,8 @@ jobs:
       # Gate 6 — Integration tests (Neon ephemeral branch)
       # Phase 1a: tests use `describe.skipIf(!HAS_DB)` — skip gracefully without TEST_DATABASE_URL.
       # When the secret is provisioned, integration suite flips from "placeholder" to "real".
+      # P-audit-4 (post-Phase-6.4): tests/integration/ci-guard.test.ts hard-fails this gate
+      # when CI=true AND TEST_DATABASE_URL is absent — silent-green is no longer possible.
       # ─────────────────────────────────────────────
       - name: Gate 6 — Integration tests
         run: npm run test:integration
