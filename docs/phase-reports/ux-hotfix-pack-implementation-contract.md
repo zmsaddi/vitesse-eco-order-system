@@ -461,8 +461,6 @@ After Tranche 3 close + deploy:
 
 ## 13. Decision
 
-*(Filled by reviewer after each tranche.)*
-
 ### Conditions for acceptance (pre-stated, all three tranches)
 1. All 8 gates green per tranche.
 2. New regression guard files (`ui-shell-contract.test.ts` + `ui-performance-contract.test.ts`) green and cover the listed assertions.
@@ -472,8 +470,72 @@ After Tranche 3 close + deploy:
 6. Zero new npm dependency.
 7. Local commits only — no push, no deploy until after T3 + final sweep.
 
-### Final pack acceptance (post-T3)
-8. PDF + print smoke green AFTER first real `confirm-delivery` produces an invoice (operator action; not blocking deploy).
+### Reviewer rulings
+
+- **Tranche 1** — accepted on `ab0c953` (2026-04-25). RTL shell fix landed: sidebar visual-right, dead breadcrumb removed, PageShell container contract honored, action source order verified by 8 `T-UX-SHELL-*` assertions.
+- **Tranche 2** — accepted on `ef7ac6f` (2026-04-25). Brand `@theme` tokens added, surface-neutrality preserved, /notifications empty state replaced, table row-hover landed across /invoices /deliveries /treasury, /action-hub urgent badge migrated to brand-500. T1 invariants reverified intact under T2.
+- **Tranche 3** — accepted on `6f11f3b` (2026-04-25). All six SSR pages converted to direct service calls; API surface byte-identical; no countUnread / no /login touch; new `T-UX-PERF-01..08` regression guard added; `T-UX-PERF-08` flagged as helper guard, with `T-UX-PERF-01..06` carrying the actual contract.
+
+**No blocker found in any tranche.**
+
+### Final pack sweep (closing — 2026-04-25)
+
+Re-ran all 8 gates against the pack HEAD `6f11f3b` after triple-tranche acceptance. Each gate executed once, no isolated reruns required:
+
+| Gate | Result |
+|------|--------|
+| `npm run lint` | ✓ 1 pre-existing warning (`managerBId` in `phase-5.3-dashboard-reports.test.ts`) — pre-pack baseline |
+| `npm run typecheck` | ✓ |
+| `npm run build` | ✓ 53 pages generated; route map identical to T2 |
+| `npm run db:migrate:check` | ✓ "Everything's fine" |
+| `npm run test:unit` | ✓ 275 / 275 |
+| `npm run test:regression` | ✓ 18 / 18 (T1 shell 8 + T3 perf 8 + ci-guards 2) |
+| `npm run test:authz` | ✓ 110 / 110 unchanged from P-audit-2 baseline |
+| `npm run test:integration` | ✓ 450 / 450 — first-run green, no Neon cold-start cascade flake |
+
+Sweep duration end-to-end: ~13 min (integration dominates). No cascade flake triggered this time, in contrast to T1 (1 cascade) + T2 (3 cascade victims). Treated as observational only — Neon cold-start flake is infra, non-deterministic by definition.
+
+### Pack invariants reverified at closing
+
+- `git diff --stat` against the declared not-touched paths is **empty** for: `src/db/**`, `src/app/api/**`, `src/modules/**`, `src/middleware*`, `src/auth*`, `src/lib/session-claims.ts`, `tests/integration/setup.ts`, `vitest.config.ts`, `package.json`, `package-lock.json`. The `(app)/layout.tsx countUnread` call also remained untouched.
+- Three pack commits (`ab0c953` → `ef7ac6f` → `6f11f3b`) and one pre-pack PWA fix (`094d8ec`) are linear on `main`, ahead of the pilot baseline `f1aa900`. No merge-ahead, no rebase, no destructive history rewrite. Bisect-ability preserved: each commit corresponds to exactly one tranche.
+- The unrelated audit document `docs/phase-reports/full-workflow-audit-2026-04-24.md` remained untracked across all three pack commits per the standing rule. Re-verified at closing time via `git status --short`.
+- `src/components/layout/AppLayout.tsx` no longer carries `flex-row-reverse` (T1's structural fix) — verified by `T-UX-SHELL-01`.
+- Six `(app)/page.tsx` files no longer build same-origin URLs from `${protocol}://${host}/api/v1/...` (T3's structural fix) — verified by `T-UX-PERF-01..06`.
+
+### Acceptance summary
+
+The pack ships three commits, one closing-doc commit (this update), and one new regression file. Net diff:
+
+| Layer | Files | Insertions | Deletions |
+|-------|-------|:---:|:---:|
+| Shell mechanics (T1) | 4 | ~150 | ~30 |
+| Visual redesign (T2) | 10 | 115 | 25 |
+| Performance hardening (T3) | 8 | 279 | 237 |
+| **Pack total** | **22** | **~544** | **~292** |
+
+Net page LOC across the six (app) pages: **472 → 175 (~−63%)**. Each page-render now drops one HTTP RTT + one Vercel function invocation + one duplicate Zod parse cycle.
+
+### Final pack ruling
+
+**ACCEPTED.** Cleared for `git push -u origin main` + `vercel deploy --prod`.
+
+### Post-deploy smoke (operator-driven; recorded after deploy)
+
+| Path | Result |
+|------|--------|
+| `/action-hub` | _pending post-deploy_ |
+| `/notifications` | _pending post-deploy_ |
+| `/dashboard` | _pending post-deploy_ |
+| `/deliveries` | _pending post-deploy_ |
+| `/invoices` | _pending post-deploy_ |
+| `/treasury` | _pending post-deploy_ |
+| `/manifest.webmanifest` | _pending post-deploy_ |
+| `/sw.js` | _pending post-deploy_ |
+| PDF download (after first real `confirm-delivery`) | _pending operator action_ |
+| `/invoices/[id]/print` | _pending operator action_ |
+
+Smoke results to be recorded in the immediate response back to the operator (not a separate commit) so the human-readable timeline matches the operator-visible flow. If any smoke probe fails, a follow-up commit captures the regression detail + remediation.
 
 ---
 
