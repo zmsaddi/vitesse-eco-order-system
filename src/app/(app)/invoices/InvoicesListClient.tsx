@@ -96,7 +96,7 @@ export function InvoicesListClient({ invoices, total, query }: Props) {
               </tr>
             ) : (
               invoices.map((inv) => (
-                <tr key={inv.id}>
+                <tr key={inv.id} className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/40">
                   <td className="px-3 py-2" dir="ltr">
                     {inv.refCode}
                   </td>

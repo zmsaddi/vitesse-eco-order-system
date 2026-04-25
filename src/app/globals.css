@@ -9,6 +9,20 @@
 
 @theme {
   --font-sans: var(--font-cairo), system-ui, sans-serif;
+
+  /* UX hotfix T2 (2026-04-25) — brand accent scale.
+     Calm teal-blue (oklch hue ≈ 200) chosen to avoid Tailwind's default
+     purple/indigo and to stay readable in both light + dark contexts.
+     Used SPARINGLY: active nav state, primary count badges on Action Hub,
+     focus rings. Page surfaces continue to use neutral gray utilities so
+     the existing dark-mode (dark:bg-gray-XXX) classes keep working
+     unchanged. */
+  --color-brand-50: oklch(0.97 0.02 200);
+  --color-brand-100: oklch(0.93 0.04 200);
+  --color-brand-200: oklch(0.86 0.07 200);
+  --color-brand-500: oklch(0.62 0.13 200);
+  --color-brand-600: oklch(0.55 0.14 200);
+  --color-brand-700: oklch(0.47 0.13 200);
 }
 
 html {

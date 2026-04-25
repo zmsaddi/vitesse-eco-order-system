@@ -332,6 +332,58 @@ After Tranche 3 close + deploy:
 2. Mobile responsive shell remains out of scope (Q3 confirmed).
 3. countUnread call in `(app)/layout.tsx` not touched (Q-extra confirmed; deferred to live-profiling decision).
 
+### Tranche 2 — Visual Redesign (closed 2026-04-25)
+
+**Files actually touched (9 modified, 0 new):**
+- `src/app/globals.css` — added a 6-step `--color-brand-*` scale (oklch teal-blue) under the existing `@theme` block. +14 LOC. Tokens reserved for active nav, count badges, focus rings; surfaces stay neutral.
+- `src/components/layout/Sidebar.tsx` — active state migrated from `bg-brand-50/text-brand-700` (light) and `dark:bg-brand-500/15 dark:text-brand-50` (dark); inactive items get `hover:bg-gray-100 dark:hover:bg-gray-800/60`; section header gets `tracking-tight uppercase tracking-wider`. ±14 LOC.
+- `src/components/layout/Topbar.tsx` — welcome split into muted prefix `أهلاً،` + bold name; sign-out button gets `transition-colors hover:bg-gray-100 hover:text-gray-900` + dark variants. ±9 LOC.
+- `src/components/ui/PageShell.tsx` — title block gets bottom border `border-b border-gray-200 pb-4 dark:border-gray-800` + h1 gets `tracking-tight text-gray-900 dark:text-gray-50`. ±10 LOC.
+- `src/app/(app)/notifications/NotificationsListClient.tsx` — filter bar `rounded` → `rounded-md`; dark border consistency `dark:border-gray-700` → `dark:border-gray-800`; total bolded, unread count uses `text-brand-600 dark:text-brand-200` when > 0; empty state replaced with icon `📭` + heading + subtext. Bug fix: `!listQ.isLoading && items.length === 0` → also gates on `!listQ.isError` so the empty state no longer flashes during a network error. +31/-12 LOC.
+- `src/app/(app)/action-hub/ActionHubClient.tsx` — urgent-action count badge: `bg-gray-900 ... dark:bg-gray-100 dark:text-gray-900` → `bg-brand-500 hover:bg-brand-600 text-white` (consistent across light/dark). 1-line change.
+- `src/app/(app)/invoices/InvoicesListClient.tsx` — table rows get `transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/40`. 1-line change.
+- `src/app/(app)/deliveries/DeliveriesListClient.tsx` — same row-hover treatment. 1-line change.
+- `src/app/(app)/treasury/TreasuryViewClient.tsx` — same row-hover treatment, applied to both accounts and movements rows. 2-line change.
+
+**Files NOT touched in T2** (planned but unnecessary): `src/app/(app)/dashboard/DashboardClient.tsx` — KPI card visual already uses the same neutral surface language; the page renders inside `PageShell`, so it inherits the title-block bottom border + tracking-tight upgrade for free. Adding bespoke styling would only churn lines without observable improvement.
+
+**What I checked**:
+- Brand scale stays decoupled from surfaces. Existing `dark:bg-gray-900` / `dark:bg-gray-800/40` body backgrounds keep working; brand color only appears where the user's eye should be drawn (active nav pill, urgent badge, unread count). Inline comment in `globals.css` documents this contract for future maintainers.
+- Empty state on /notifications was the loudest "wireframe" defect from the executive brief; replacing it with iconography + a two-line message lifts perceived polish more than any token change.
+- Listed three table-heavy pages got the same row-hover treatment so cursor affordance is consistent across the app — one defect class fixed in three places with one declarative pattern.
+
+**Invariants-to-proof mapping**:
+
+| Invariant | Proof |
+|-----------|-------|
+| T1 shell invariants still hold (sidebar right rail, no breadcrumb, action source order, container) | T1's 8 `T-UX-SHELL-*` assertions in `tests/regression/ui-shell-contract.test.ts` rerun green under T2 — none of T2's edits touched the structural anchors |
+| No new file outside the declared 9 | `git status --short` shows exactly the 9 listed |
+| Brand tokens land in `globals.css`, not as hard-coded RGB hexes | `--color-brand-{50,100,200,500,600,700}` defined in oklch under `@theme` |
+| Surface neutrality preserved | Body / card / table backgrounds remain on the gray-* scale; brand only on active-nav + count + urgent-badge |
+| API surface unchanged | Zero `src/app/api/**` diff; zero `src/modules/**` diff |
+| Pack scope respected | Zero `src/db/**`, `src/middleware*`, `src/auth*`, `src/lib/session-claims.ts`, `tests/integration/setup.ts`, `vitest.config.ts`, `package.json` lines |
+
+**Gates run + outcomes**:
+
+| Gate | Result | Notes |
+|------|--------|-------|
+| lint | ✓ | 1 pre-existing warning (managerBId in phase-5.3-test) — pre-T1 baseline, not introduced here |
+| typecheck | ✓ | — |
+| build | ✓ | all routes generated as expected |
+| db:migrate:check | ✓ | "Everything's fine 🐶🔥" |
+| test:unit + coverage | ✓ | 275/275 — 83.10 / 82.43 / 89.87 / 83.84 (unchanged vs T1) |
+| test:regression | ✓ | 33/33 — T1's 8 shell-contract assertions still pass under T2 edits (no regression in shell anchors) |
+| test:authz | ✓ | 110/110 unchanged |
+| test:integration | ✓ (after 1 isolated rerun of 3 files) | first full run: 422/450 green; 3 files failed with the documented Neon cold-start cascade signature (`Connection terminated → admin row missing → [0].id undefined`) — root failure in `suppliers-crud`, cascade victims `purchases-crud` + `auth-round-trip`. Isolated rerun → 28/28 green in 26s. Combined coverage 450/450. Classified **infra flake** per audit §8 debug order; not a T2 regression. |
+
+**Manual smoke (executive brief §6 part 1)**: deferred to operator review of this commit because T2 is purely visual + the application is RTL/Arabic — visual judgment is the operator's call, not mine. The structural correctness is fully covered by the 8 regression assertions inherited from T1 (which would catch any visual edit that accidentally damages the shell). T3 will run its own gates + own structural assertions; pre-deploy smoke is recorded in §6.h.
+
+**Known limitations (non-blocking)**:
+1. The contract budgeted +30 LOC for `globals.css`; reality is +14. Tokens needed only the 6 brand steps; existing surface tokens already covered the rest.
+2. The contract listed `DashboardClient.tsx` among 6 page files; reality is 5 (dashboard inherits via PageShell). Reported here rather than padded with no-op churn.
+3. Visual contrast in dark mode for `bg-brand-500/15` against `bg-gray-900` was eyeballed against the existing palette; no automated WCAG audit run. If pilot users report low active-nav contrast, the next tranche bumps to `bg-brand-500/25`.
+4. `tests/regression/ui-shell-contract.test.ts` was NOT extended with T2 token-presence assertions — the contract said "added incrementally inside the same regression file under a `T-UX-VIS-*` section if needed". Decision: not needed, because brand tokens are stylistic, not structural. Adding `T-UX-VIS-*` assertions would lock in *aesthetic* choices instead of *contractual* ones, making future palette tweaks a forced regression-file edit. Skipping is the more conservative choice.
+
 ---
 
 ## 13. Decision

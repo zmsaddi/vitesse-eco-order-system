@@ -77,7 +77,7 @@ export function ActionHubClient({ data }: { data: ActionHubResponse }) {
                   <span className="text-sm">{row.label}</span>
                   <Link
                     href={row.href}
-                    className="rounded bg-gray-900 px-3 py-1 text-xs font-semibold text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+                    className="rounded-md bg-brand-500 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-brand-600 dark:bg-brand-500 dark:text-white dark:hover:bg-brand-600"
                   >
                     {count}
                   </Link>

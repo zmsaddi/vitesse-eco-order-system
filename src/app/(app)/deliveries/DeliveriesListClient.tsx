@@ -126,7 +126,7 @@ export function DeliveriesListClient({
               </tr>
             ) : (
               deliveries.map((d) => (
-                <tr key={d.id}>
+                <tr key={d.id} className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/40">
                   <td className="px-3 py-2" dir="ltr">
                     {d.refCode}
                   </td>

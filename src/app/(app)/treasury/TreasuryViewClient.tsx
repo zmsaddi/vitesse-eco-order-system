@@ -57,7 +57,7 @@ export function TreasuryViewClient({
                 </tr>
               ) : (
                 accounts.map((a) => (
-                  <tr key={a.id}>
+                  <tr key={a.id} className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/40">
                     <td className="truncate px-3 py-2">{a.name}</td>
                     <td className="px-3 py-2">{ACCOUNT_TYPE_LABEL[a.type]}</td>
                     <td className="px-3 py-2">
@@ -102,7 +102,7 @@ export function TreasuryViewClient({
                 </tr>
               ) : (
                 movements.map((m) => (
-                  <tr key={m.id}>
+                  <tr key={m.id} className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/40">
                     <td className="px-3 py-2" dir="ltr">
                       {m.date}
                     </td>

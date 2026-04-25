@@ -63,13 +63,13 @@ export function NotificationsListClient({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3 rounded border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
+      <div className="flex flex-wrap items-center gap-3 rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
         <label className="text-xs text-gray-600 dark:text-gray-400">
           النوع
           <select
             value={query.type ?? ""}
             onChange={(e) => setType(e.target.value || undefined)}
-            className="ms-2 rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-700 dark:bg-gray-800"
+            className="ms-2 rounded-md border border-gray-300 px-2 py-1 text-sm dark:border-gray-700 dark:bg-gray-800"
           >
             <option value="">الكل</option>
             {NOTIFICATION_TYPES.map((t) => (
@@ -84,34 +84,49 @@ export function NotificationsListClient({
           <select
             value={query.unread === true ? "unread" : "all"}
             onChange={(e) => setUnread(e.target.value === "unread" ? true : undefined)}
-            className="ms-2 rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-700 dark:bg-gray-800"
+            className="ms-2 rounded-md border border-gray-300 px-2 py-1 text-sm dark:border-gray-700 dark:bg-gray-800"
           >
             <option value="all">الكل</option>
             <option value="unread">غير مقروء فقط</option>
           </select>
         </label>
         <div className="ms-auto text-xs text-gray-600 dark:text-gray-400">
-          {total} سجل · {unread} غير مقروء
+          <span className="font-semibold text-gray-900 dark:text-gray-100">{total}</span> سجل ·{" "}
+          {unread > 0 ? (
+            <span className="font-semibold text-brand-600 dark:text-brand-200">
+              {unread} غير مقروء
+            </span>
+          ) : (
+            <span>0 غير مقروء</span>
+          )}
         </div>
         <button
           type="button"
           onClick={() => markAll.mutate()}
           disabled={markAll.isPending || unread === 0}
-          className="rounded border border-gray-300 px-3 py-1.5 text-xs hover:bg-gray-100 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
+          className="rounded-md border border-gray-300 px-3 py-1.5 text-xs transition-colors hover:bg-gray-100 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
         >
           تعليم الكل كمقروء
         </button>
       </div>
 
-      <ul className="divide-y divide-gray-100 rounded border border-gray-200 bg-white dark:divide-gray-800 dark:border-gray-700 dark:bg-gray-900">
+      <ul className="divide-y divide-gray-100 rounded-md border border-gray-200 bg-white dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-900">
         {listQ.isLoading && (
           <li className="px-4 py-6 text-center text-sm text-gray-500">جارٍ التحميل...</li>
         )}
         {listQ.isError && (
           <li className="px-4 py-6 text-center text-sm text-red-600">تعذّر التحميل</li>
         )}
-        {!listQ.isLoading && items.length === 0 && (
-          <li className="px-4 py-6 text-center text-sm text-gray-500">لا توجد إشعارات مطابقة.</li>
+        {!listQ.isLoading && !listQ.isError && items.length === 0 && (
+          <li className="flex flex-col items-center gap-2 px-4 py-12 text-center">
+            <div className="text-3xl" aria-hidden>📭</div>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-200">
+              لا توجد إشعارات مطابقة
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              عند وصول إشعار جديد سيظهر هنا فوراً.
+            </p>
+          </li>
         )}
         {items.map((n) => {
           const isUnread = !n.readAt;
