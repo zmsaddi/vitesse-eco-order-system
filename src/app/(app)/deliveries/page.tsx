@@ -1,17 +1,16 @@
-import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { enforcePageRole } from "@/lib/session-claims";
+import { withRead } from "@/db/client";
 import { PageShell } from "@/components/ui/PageShell";
-import {
-  ListDeliveriesQuery,
-  type DeliveryDto,
-} from "@/modules/deliveries/dto";
+import { ListDeliveriesQuery } from "@/modules/deliveries/dto";
+import { listDeliveries } from "@/modules/deliveries/service";
 import { DeliveriesListClient } from "./DeliveriesListClient";
 
-// Phase 6.4 — Deliveries list page (read-only).
-// Canonical fetch to /api/v1/deliveries; zero direct service import.
-// Roles: pm, gm, manager, driver (matches backend). seller + stock_keeper
-// redirected to role-home by enforcePageRole.
+// Phase 6.4 → UX Hotfix Pack T3 — Deliveries list (read-only).
+// SSR reads via direct listDeliveries() instead of a same-origin canonical
+// fetch to /api/v1/deliveries. Scope unchanged: pm/gm/manager see all,
+// driver sees own only — enforced inside the service via the same Phase 4.0
+// visibility helper the API route uses.
 
 type SP = {
   limit?: string;
@@ -21,43 +20,6 @@ type SP = {
   dateTo?: string;
   assignedDriverId?: string;
 };
-
-type ListResponse = { deliveries: DeliveryDto[]; total: number };
-
-async function fetchDeliveriesCanonically(query: {
-  limit?: number;
-  offset?: number;
-  status?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  assignedDriverId?: number;
-}): Promise<ListResponse> {
-  const hdrs = await headers();
-  const host = hdrs.get("host");
-  if (!host) throw new Error("deliveries page: cannot resolve host");
-  const protocol = hdrs.get("x-forwarded-proto") ?? "http";
-  const cookieStr = (await cookies()).toString();
-
-  const sp = new URLSearchParams();
-  if (query.limit !== undefined) sp.set("limit", String(query.limit));
-  if (query.offset !== undefined) sp.set("offset", String(query.offset));
-  if (query.status) sp.set("status", query.status);
-  if (query.dateFrom) sp.set("dateFrom", query.dateFrom);
-  if (query.dateTo) sp.set("dateTo", query.dateTo);
-  if (query.assignedDriverId !== undefined) {
-    sp.set("assignedDriverId", String(query.assignedDriverId));
-  }
-  const qs = sp.toString();
-
-  const res = await fetch(
-    `${protocol}://${host}/api/v1/deliveries${qs ? `?${qs}` : ""}`,
-    { headers: { cookie: cookieStr }, cache: "no-store" },
-  );
-  if (!res.ok) {
-    throw new Error(`GET /api/v1/deliveries → ${res.status}`);
-  }
-  return (await res.json()) as ListResponse;
-}
 
 export default async function DeliveriesPage({
   searchParams,
@@ -78,15 +40,25 @@ export default async function DeliveriesPage({
   const parsed = ListDeliveriesQuery.safeParse(raw);
   const query = parsed.success ? parsed.data : { limit: 50, offset: 0 };
 
-  const data = await fetchDeliveriesCanonically(query);
+  const result = await withRead(undefined, (db) =>
+    listDeliveries(
+      db,
+      {
+        userId: claims.userId,
+        username: claims.username,
+        role: claims.role,
+      },
+      query,
+    ),
+  );
 
   const title = claims.role === "driver" ? "توصيلاتي" : "التوصيلات";
 
   return (
-    <PageShell title={title} subtitle={`${data.total} توصيل`}>
+    <PageShell title={title} subtitle={`${result.total} توصيل`}>
       <DeliveriesListClient
-        deliveries={data.deliveries}
-        total={data.total}
+        deliveries={result.rows}
+        total={result.total}
         query={query}
         role={claims.role}
       />

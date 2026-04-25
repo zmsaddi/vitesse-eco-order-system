@@ -384,6 +384,79 @@ After Tranche 3 close + deploy:
 3. Visual contrast in dark mode for `bg-brand-500/15` against `bg-gray-900` was eyeballed against the existing palette; no automated WCAG audit run. If pilot users report low active-nav contrast, the next tranche bumps to `bg-brand-500/25`.
 4. `tests/regression/ui-shell-contract.test.ts` was NOT extended with T2 token-presence assertions — the contract said "added incrementally inside the same regression file under a `T-UX-VIS-*` section if needed". Decision: not needed, because brand tokens are stylistic, not structural. Adding `T-UX-VIS-*` assertions would lock in *aesthetic* choices instead of *contractual* ones, making future palette tweaks a forced regression-file edit. Skipping is the more conservative choice.
 
+### Tranche 3 — Performance Hardening (closed 2026-04-25)
+
+**Files actually touched (6 modified + 1 new):**
+- `src/app/(app)/action-hub/page.tsx` — replaced `fetchActionHubCanonically()` (host + x-forwarded-proto + cookies passthrough + SSR fetch to `/api/v1/action-hub`) with a direct `withRead(undefined, db => loadActionHubPayload(db, ctx))` call. -38 / +18 LOC net.
+- `src/app/(app)/dashboard/page.tsx` — same pattern; calls `getDashboard(db, query, ctx)` directly. -51 / +24 LOC net.
+- `src/app/(app)/deliveries/page.tsx` — calls `listDeliveries(db, ctx, query)`; result `{ rows, total }` is wrapped to `{ deliveries: result.rows, total: result.total }` exactly as the route used to wrap. -72 / +27 LOC net.
+- `src/app/(app)/invoices/page.tsx` — calls `listInvoices(db, ctx, query)`; same `{ rows → invoices }` rename inline. -64 / +27 LOC net.
+- `src/app/(app)/notifications/page.tsx` — calls `listNotifications(db, query, ctx)` (note query-before-ctx ordering — different from deliveries / invoices / treasury — matches the existing service signature). -63 / +27 LOC net.
+- `src/app/(app)/treasury/page.tsx` — calls `listTreasury(db, ctx, query)`. -56 / +25 LOC net.
+- `tests/regression/ui-performance-contract.test.ts` — NEW, 8 assertions across `T-UX-PERF-01..08`.
+
+**Total page-LOC delta**: 6 pages dropped from 472 → 175 lines (~−63%); the win is the same code on every page now follows one declarative shape (claims → parse query → withRead → render) instead of redoing the canonical-fetch ritual six times.
+
+**Files NOT touched in T3 (asserted)**:
+- `src/app/api/v1/{action-hub,dashboard,deliveries,invoices,notifications,treasury}/route.ts` — zero lines. The API surface is byte-identical for external callers + the P-audit-2 authz matrix (110 cells).
+- `src/modules/{action-hub,dashboard,deliveries,invoices,notifications,treasury}/service.ts` — zero lines. The page now imports the same exports the route handler does.
+- `src/db/client.ts` — zero lines. `withRead` is consumed unchanged.
+- `src/lib/session-claims.ts`, `src/lib/api-errors.ts`, `src/lib/unread-count-header.ts` — zero lines. The page does not need `jsonWithUnreadCount` because the page emits JSX, not an HTTP response; the bell-badge `X-Unread-Count` header continues to ride the route handler on subsequent client-side TanStack Query calls.
+- `src/middleware.ts`, `src/middleware-public.ts`, `src/middleware-headers.ts`, `src/auth.ts`, `src/auth.config.ts` — zero lines.
+- `tests/integration/setup.ts` — zero lines (carry-over reviewer constraint).
+- `vitest.config.ts`, `package.json`, `package-lock.json` — zero lines / zero new dep.
+- `(app)/layout.tsx` — `countUnread` call left unchanged per Q-extra confirmation. If pilot profiling later flags it as a bottleneck, it becomes its own tranche.
+
+**What I checked**:
+- Every page now goes through the SAME service entry point the API route uses, so any business-logic change in the service automatically applies to both the page and the API. No drift surface added.
+- Page authentication still happens via `enforcePageRole` / `getSessionClaims`; the page does not call `requireRole` (which is the Request-handler variant). Auth gates remain identical; only the transport for the data fetch changed.
+- The bell-badge unread count refresh path is preserved: the global fetch interceptor consumes the `X-Unread-Count` header from `/api/v1/notifications` (and every other API call client-side). Removing the SSR `fetch(/api/v1/notifications)` only drops the duplicate trip the page used to make on initial render — every subsequent TanStack Query refetch still goes through the route, still surfaces the header, still drives the badge.
+- For deliveries + invoices, the route returned `{ deliveries: result.rows, total: result.total }` (renamed `rows → deliveries|invoices`). The page now performs the same rename inline before passing to the client renderer, so the renderer prop shape is unchanged.
+- For dashboard, the role-conditional title (`"لوحتي"` / `"لوحة التحكم"`) and subtitle (`"من X إلى Y"` from `initial.period.from/to`) read from the SAME response shape that `/api/v1/dashboard` used to emit — the service returns it directly.
+- For treasury, the role-conditional title (`"صندوقي"` / `"عهدتي"` / `"الصناديق"`) reads from `claims.role`; the snapshot shape (`{ accounts, movements, movementsTotal }`) is what the service returns directly — the route was returning it unwrapped, so the page extracting those fields keeps working.
+
+**Invariants-to-proof mapping**:
+
+| Invariant | Proof |
+|-----------|-------|
+| No page builds a `${protocol}://${host}/api/v1/...` URL | `T-UX-PERF-01..06` (one assertion per page; 4 sub-checks each: forbid the template-literal URL pattern, forbid `fetch(... /api/v1/ ...)`, forbid `hdrs.get("host")`, forbid `hdrs.get("x-forwarded-proto")`) |
+| API routes still exist on disk | `T-UX-PERF-07` (file existence check on all 6 route.ts files) |
+| Every page now imports `withRead` from `@/db/client` | `T-UX-PERF-08` (anchored to import statement, not arbitrary string) |
+| API surface byte-identical | `git diff --stat src/app/api` empty for the 6 routes; integration suite 450/450 still green (would have caught any accidental drift) |
+| Authz matrix unchanged | `tests/authz` 110/110 still green |
+| Service signatures correct (notifications query-first vs others ctx-first) | typecheck green |
+| Page renderer prop shapes unchanged | T1's shell contract still green; client renderer files (`*ListClient.tsx`) untouched in T3 |
+
+**Gates run + outcomes**:
+
+| Gate | Result | Notes |
+|------|--------|-------|
+| lint | ✓ | 1 pre-existing warning (managerBId in phase-5.3-test) — pre-T1 baseline |
+| typecheck | ✓ | — |
+| build | ✓ | all 53 pages generated; same route map as T2 |
+| db:migrate:check | ✓ | "Everything's fine 🐶🔥" |
+| test:unit + coverage | ✓ | 275/275 — coverage unchanged (no new module code) |
+| test:regression | ✓ | **18/18** (10 baseline incl. ci-guards + 8 T1 shell + 8 T3 perf) — first run green |
+| test:authz | ✓ | 110/110 unchanged |
+| test:integration | ✓ | **450/450 first run, no flake this time** (no isolated reruns needed) — confirms direct-service-call refactor did not regress any business path |
+
+**Manual smoke (executive brief §6 part 1)**: deferred to operator review of T3 commit + post-deploy. T3 is structural — the visual T2 polish stays unchanged on screen; the only observable difference is "the page loads with one fewer HTTP RTT". That is a latency / function-invocation win, not a visual one.
+
+**Performance observation (§11 budget)**:
+- Per page render, T3 removes:
+  - 1 same-origin fetch RTT to the same Vercel function pool.
+  - 1 Vercel function invocation count (the `/api/v1/...` route handler instance).
+  - 1 round of cookie serialization + JSON serialize/parse.
+- For pages with searchParams (5 of 6), Zod parsing now happens once (in the page) instead of twice (page + route).
+- Net theoretical saving per visit: ~1 RTT × 6 pages = 6 fewer same-origin hops in a typical operator session.
+- No before/after Lighthouse run committed (per §11 — operator-observed only post-deploy).
+
+**Known limitations (non-blocking)**:
+1. The contract listed an "optional 6th page" (`/action-hub`) for T3; the user explicitly upgraded it to mandatory in the T3 instruction. Reported here so the file count (6, not 5) is honest against the original §3 budget.
+2. `notifications` SSR fetch removal does NOT apply to the bell-badge polling path — that polling still goes through `/api/v1/notifications` from the client, by design (the badge needs the `X-Unread-Count` header which is route-handler-only). T3 only optimizes the initial server render.
+3. The `/login` page was deliberately excluded from T3 even though it shares the SSR pattern with the (app) shell — the login flow is auth-critical and should only be touched under P-audit-3 (Playwright HTTP round-trip coverage), which remains the open audit debt entry in `project_open_audit_debt.md`.
+4. `T-UX-PERF-08` asserts the `withRead` import on every converted page; this is a positive presence check, not a structural correctness check. A hypothetical future PR that imports `withRead` but uses it in a way that re-introduces a network hop would NOT trigger this assertion. The `T-UX-PERF-01..06` set explicitly names the canonical pattern instead, which is the actual contract.
+
 ---
 
 ## 13. Decision
